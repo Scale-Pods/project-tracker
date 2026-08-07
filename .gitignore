@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+AGENTS.md
+CLAUDE.md
+incentive-plan.md
+PRD.md
+PROMPT.md
+Supabase_Schema_Design.md
+
+.claude
