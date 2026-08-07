@@ -1,26 +1,331 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-ubuntu), "Segoe UI", system-ui, sans-serif;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-bg-base: #010228;
+  --color-bg-deep: #000000;
+  --color-surface-card: #0c0c3a;
+  --color-surface-elevated: #14144a;
+  --color-accent-primary: #1616ac;
+  --color-status-good: #34d9a4;
+  --color-status-warn: #f5b450;
+  --color-status-bad: #ff6b6b;
+  --color-text-primary: #f3f4fb;
+  --color-text-secondary: #9497c4;
+  --color-border-subtle: #2a2a66;
+
+  --animate-shimmer: shimmer 2.2s ease-in-out infinite;
+  --animate-card-in: card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fill: fill-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fill-in {
+    from {
+      width: 0%;
+    }
   }
 }
 
+:root {
+  color-scheme: dark;
+
+  /* Ambient background tuning — retune the whole mesh/orb/noise/vignette
+     system from here without touching the rules below. --color-bg-accent is
+     deliberately its own token, separate from --color-accent-primary: the
+     background's "primary blue" can be retuned (darkened, etc.) here without
+     ever affecting buttons, badges, or any UI chrome in the cards/detail
+     sections, which read --color-accent-primary directly. */
+  --color-bg-accent: #050638;
+  --orb-opacity-primary: 0.18;
+  --orb-opacity-deep: 0.28;
+  --orb-opacity-highlight: 0.04;
+  --orb-blur-sm: 60px;
+  --orb-blur-md: 85px;
+  --orb-blur-lg: 115px;
+  --orb-blur-xl: 140px;
+  --noise-opacity: 0.035;
+  --vignette-opacity: 0.85;
+}
+
+/* background-color lives on <html> only, never <body>: <html>'s background
+   paints on the canvas layer, below the whole stacking context. If <body>
+   also had an opaque background, its own box (a positioned, stack-level-0
+   participant once `position: relative` below is applied) would paint over
+   the negative-z-index .bg-ambient div and hide the gradient entirely. */
+html {
+  background-color: var(--color-bg-deep);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text-primary);
+  position: relative;
+}
+
+/* Fixed, non-interactive ambient background: one wrapper behind all content
+   (mounted once via <BackgroundGradient>, see components/ui/), holding a
+   mesh glow, a handful of blurred orbs, a faint noise pass, and a vignette.
+   Deliberately a SINGLE z-index:-1 layer — internal ordering between the
+   sub-layers is plain DOM order, not more z-index, since stray negative
+   z-index values are exactly what silently hid this background before (see
+   the html/body comment above). `contain` isolates this subtree's layout
+   and paint from the rest of the page for cheaper repaints. */
+.bg-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+
+/* Global radial mesh: three soft stops biased toward the upper-left, fading
+   to transparent so the <html> black shows through at the edges. */
+.bg-mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(75% 70% at 50% 100%, #000000 0%, transparent 70%),
+    radial-gradient(65% 60% at 14% -6%, rgba(1, 2, 40, 0.60) 0%, #000000 70%, transparent 85%),
+    radial-gradient(50% 45% at 84% 10%, rgba(5, 6, 56, 0.15) 0%, transparent 58%),
+    radial-gradient(45% 45% at 55% 88%, rgba(1, 2, 40, 0.10) 0%, transparent 60%);
+}
+
+/* Orb system: reusable blurred glows. Variant classes set color + the
+   --orb-opacity custom property; size classes set dimensions + --orb-blur.
+   Both are only ever *set* by the variant/size classes and only *read* here,
+   so class order on the element never matters. */
+.bg-orb {
+  position: absolute;
+  border-radius: 9999px;
+  opacity: var(--orb-opacity, 0.3);
+  filter: blur(var(--orb-blur, 90px));
+  will-change: transform, opacity;
+  animation-name: orb-pulse;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+.bg-orb-primary {
+  background: var(--color-bg-accent);
+  --orb-opacity: var(--orb-opacity-primary);
+}
+.bg-orb-deep {
+  background: var(--color-bg-base);
+  --orb-opacity: var(--orb-opacity-deep);
+}
+.bg-orb-highlight {
+  background: #ffffff;
+  --orb-opacity: var(--orb-opacity-highlight);
+}
+
+/* clamp() sizing shrinks orbs smoothly on narrow viewports in place of a
+   separate mobile ruleset, and keeps them bounded enough that, combined with
+   the wrapper's overflow:hidden, they can never cause horizontal overflow. */
+.bg-orb-sm {
+  width: clamp(140px, 16vw, 220px);
+  height: clamp(140px, 16vw, 220px);
+  --orb-blur: var(--orb-blur-sm);
+}
+.bg-orb-md {
+  width: clamp(220px, 26vw, 380px);
+  height: clamp(220px, 26vw, 380px);
+  --orb-blur: var(--orb-blur-md);
+}
+.bg-orb-lg {
+  width: clamp(300px, 34vw, 560px);
+  height: clamp(300px, 34vw, 560px);
+  --orb-blur: var(--orb-blur-lg);
+}
+.bg-orb-xl {
+  width: clamp(360px, 44vw, 760px);
+  height: clamp(360px, 44vw, 760px);
+  --orb-blur: var(--orb-blur-xl);
+}
+
+/* Scale + opacity only: both are compositor-only properties, so this never
+   triggers layout or paint on its own. prefers-reduced-motion is handled by
+   the global animation-duration override further down, not duplicated here. */
+@keyframes orb-pulse {
+  0% {
+    transform: scale(1);
+    opacity: var(--orb-opacity, 0.3);
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: calc(var(--orb-opacity, 0.3) * 0.82);
+  }
+}
+
+/* Very low-opacity grain so the glow reads as atmosphere rather than a flat
+   vector fill. Lives behind all content, so it can't touch text contrast. */
+.bg-noise {
+  position: absolute;
+  inset: 0;
+  opacity: var(--noise-opacity);
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* Subtle edge darkening so orb bleed near the viewport edges never competes
+   with peripheral UI — most of the viewport (inner 55%) is untouched. */
+.bg-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    110% 90% at 50% 35%,
+    transparent 35%,
+    rgba(0, 0, 0, var(--vignette-opacity)) 85%,
+    #000000 100%
+  );
+}
+
+* {
+  border-color: var(--color-border-subtle);
+}
+
+::selection {
+  background: var(--color-accent-primary);
+  color: var(--color-text-primary);
+}
+
+/* Visible keyboard focus ring on every interactive element, including cards. */
+:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-subtle);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Futuristic Glassmorphism Utilities */
+.glass-panel {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(12, 12, 58, 0.55) 35%,
+    rgba(12, 12, 58, 0.35) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
+    0 12px 32px -12px rgba(0, 0, 0, 0.5);
+}
+
+.glass-card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(12, 12, 58, 0.55) 30%,
+    rgba(12, 12, 58, 0.35) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
+    0 12px 32px -12px rgba(0, 0, 0, 0.5);
+}
+
+.glass-card-interactive {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-interactive:hover {
+  border-color: rgba(22, 22, 172, 0.6);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.11) 0%,
+    rgba(12, 12, 58, 0.68) 30%,
+    rgba(12, 12, 58, 0.45) 100%
+  );
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.28),
+    0 20px 50px -12px rgba(22, 22, 172, 0.45),
+    0 0 30px -4px rgba(22, 22, 172, 0.35);
+}
+
+.glass-input {
+  background: rgba(12, 12, 58, 0.5);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 24px -8px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-input:focus {
+  border-color: rgba(22, 22, 172, 0.8);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 25px -4px rgba(22, 22, 172, 0.6);
+}
+
+.glass-dropdown {
+  background: rgba(20, 20, 74, 0.85);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2),
+    0 25px 60px -15px rgba(0, 0, 0, 0.75);
+}
+
+.glass-header {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(12, 12, 58, 0.65) 40%,
+    rgba(12, 12, 58, 0.45) 100%
+  );
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2),
+    0 25px 60px -20px rgba(0, 0, 0, 0.6);
 }
