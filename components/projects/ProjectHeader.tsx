@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { StatusBadge, PriorityBadge, StageBadge, UnverifiedFlag } from "@/components/ui/Badge";
 import { TruncatedText } from "@/components/ui/TruncatedText";
+import { EditProjectButton } from "@/components/projects/EditProjectButton";
 import { formatCurrency, formatDate, formatDateRange } from "@/lib/format";
-import type { Project } from "@/lib/types";
+import type { Project, ProjectAssignee } from "@/lib/types";
 
-export function ProjectHeader({ project }: { project: Project }) {
+export function ProjectHeader({
+  project,
+  assignees,
+}: {
+  project: Project;
+  assignees: ProjectAssignee[];
+}) {
   return (
     <header
       id="overview"
@@ -33,8 +40,9 @@ export function ProjectHeader({ project }: { project: Project }) {
             </div>
             <p className="mt-1.5 text-base text-text-secondary">{project.client_name}</p>
           </div>
-          <div className="shrink-0">
+          <div className="flex shrink-0 items-center gap-3">
             <StatusBadge status={project.actual_end_date ? "Completed" : project.status} />
+            <EditProjectButton project={project} assignees={assignees} />
           </div>
         </div>
 

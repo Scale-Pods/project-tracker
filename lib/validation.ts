@@ -1,4 +1,4 @@
-import type { ProjectWithAssignees } from "@/lib/types";
+import type { Project, ProjectWithAssignees } from "@/lib/types";
 
 export type AssigneeInput = {
   name: string;
@@ -62,6 +62,59 @@ export function validateAddProjectInput(input: AddProjectInput): {
     new Date(input.plannedEndDate) <= new Date(input.startDate)
   ) {
     errors.plannedEndDate = "Planned end date must be after the start date.";
+  }
+
+  const dealSize = Number(input.projectValue.replace(/,/g, ""));
+  if (!input.projectValue || Number.isNaN(dealSize) || dealSize <= 0) {
+    errors.projectValue = "Enter a valid deal size.";
+  }
+
+  const namedAssignees = input.assignees.filter((a) => a.name.trim());
+  if (namedAssignees.length === 0) {
+    errors.assignees = "At least one assignee with a name is required.";
+  } else {
+    for (const assignee of namedAssignees) {
+      if (!PAYOUT_ROLE_OPTIONS.includes(assignee.payoutRole as (typeof PAYOUT_ROLE_OPTIONS)[number])) {
+        errors.assignees = "Each assignee needs a valid payout role.";
+        break;
+      }
+    }
+  }
+
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+export type EditAssigneeInput = AssigneeInput & { id?: string };
+
+export type EditProjectInput = {
+  projectId: string;
+  scope: string;
+  priority: string;
+  projectValue: string;
+  assignees: EditAssigneeInput[];
+};
+
+export type EditProjectState = {
+  status: "idle" | "error" | "success";
+  message?: string;
+  fieldErrors?: Record<string, string>;
+  submitted?: EditProjectInput;
+  project?: Project;
+};
+
+export const initialEditProjectState: EditProjectState = { status: "idle" };
+
+/** Mirrors validateAddProjectInput, scoped to the fields an edit is allowed to touch. */
+export function validateEditProjectInput(input: EditProjectInput): {
+  valid: boolean;
+  errors: Record<string, string>;
+} {
+  const errors: Record<string, string> = {};
+
+  if (!input.projectId) errors.projectId = "Project ID is required.";
+  if (!input.scope.trim()) errors.scope = "Scope is required.";
+  if (!PRIORITY_OPTIONS.includes(input.priority as (typeof PRIORITY_OPTIONS)[number])) {
+    errors.priority = "Select a priority.";
   }
 
   const dealSize = Number(input.projectValue.replace(/,/g, ""));

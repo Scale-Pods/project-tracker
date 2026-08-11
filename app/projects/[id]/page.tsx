@@ -68,7 +68,7 @@ export default async function ProjectDetailPage({
         <SectionNav showClosure={true} showPayout={showPayout} />
 
         <div className="min-w-0 space-y-10">
-          <ProjectHeader project={project} />
+          <ProjectHeader project={project} assignees={assignees} />
           <Suspense fallback={<ProjectSummarySkeleton />}>
             <ProjectSummarySection
               project={project}
