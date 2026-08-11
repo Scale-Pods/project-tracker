@@ -51,12 +51,7 @@ export function ProjectHeader({
           <PriorityBadge priority={project.priority} />
           {project.dev_delay_days > 0 && (
             <span className="inline-flex items-center rounded-full border border-status-bad/60 bg-status-bad/20 px-2.5 py-1 text-xs font-semibold text-status-bad shadow-[0_0_16px_-6px_var(--color-status-bad)]">
-              {project.dev_delay_days}d behind on development
-            </span>
-          )}
-          {project.support_delay_days > 0 && (
-            <span className="inline-flex items-center rounded-full border border-status-bad/60 bg-status-bad/20 px-2.5 py-1 text-xs font-semibold text-status-bad shadow-[0_0_16px_-6px_var(--color-status-bad)]">
-              {project.support_delay_days}d behind on testing/support
+              {project.dev_delay_days}d behind schedule
             </span>
           )}
         </div>

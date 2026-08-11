@@ -63,7 +63,6 @@ export async function addProject(
       status: "On Track",
       stage: "Onboarding",
       dev_delay_days: 0,
-      support_delay_days: 0,
       unverified: false,
       awaiting_closure_data: false,
     })

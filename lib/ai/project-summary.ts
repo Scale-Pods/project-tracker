@@ -43,7 +43,7 @@ function buildSummaryPrompt({ project, blockers, pendingTasks, milestones, remar
   return `You are writing a status summary for an internal project-tracking dashboard. Using ONLY the facts listed below, write a highly professional, well-structured, accurate, task-level summary of this project in 100 words or fewer. Cover ongoing activity, open blockers, and open pending tasks. Do not invent any detail not present below. Do not use markdown formatting. Return only the summary paragraph, nothing else.
 
 Project: ${project.project_name} (client: ${project.client_name})
-Status: ${project.status} | Stage: ${project.stage} | Delay: ${project.dev_delay_days} day(s) on development, ${project.support_delay_days} day(s) on testing/support
+Status: ${project.status} | Stage: ${project.stage} | Delay: ${project.dev_delay_days} day(s)
 Milestones: ${doneMilestones}/${milestones.length} done
 
 Open blockers:

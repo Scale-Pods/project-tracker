@@ -57,13 +57,12 @@ export function ProgressOverview({
 }) {
   const timelineProgress = computeTimelineProgress(
     project.dev_start_date,
-    project.support_end_date,
+    project.dev_end_date,
     project.actual_end_date
   );
   const isClosed = Boolean(project.actual_end_date);
   const milestoneProgress = computeMilestoneProgress(milestones, pendingTasks);
   const health = HEALTH_STYLES[STATUS_TONE[project.status] ?? "good"];
-  const totalDelay = project.dev_delay_days + project.support_delay_days;
 
   return (
     <section id="progress" className="scroll-mt-24">
@@ -85,15 +84,8 @@ export function ProgressOverview({
             </p>
           </div>
           <p className="mt-6 text-xs text-text-secondary">
-            {totalDelay > 0
-              ? [
-                  project.dev_delay_days > 0 &&
-                    `${project.dev_delay_days}d behind on development`,
-                  project.support_delay_days > 0 &&
-                    `${project.support_delay_days}d behind on testing/support`,
-                ]
-                  .filter(Boolean)
-                  .join(", ") + "."
+            {project.dev_delay_days > 0
+              ? `${project.dev_delay_days} day${project.dev_delay_days === 1 ? "" : "s"} behind plan.`
               : "Computed daily by the automation pipeline, independent of meetings."}
           </p>
         </div>
@@ -111,7 +103,7 @@ export function ProgressOverview({
             </div>
             <div className="mt-1.5 flex justify-between text-[11px] text-text-secondary">
               <span>{formatDate(project.dev_start_date)}</span>
-              <span>{formatDate(project.support_end_date)}</span>
+              <span>{formatDate(project.dev_end_date)}</span>
             </div>
           </div>
 
