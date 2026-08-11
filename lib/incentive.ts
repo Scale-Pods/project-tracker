@@ -41,16 +41,17 @@ export function speedFactor(delayDays: number): number {
 }
 
 /**
- * Delay measured at closure (actual vs. planned end date) — distinct from
- * `projects.delay_days`, which is the automation's ongoing daily estimate,
- * per Supabase_Schema_Design.md's note that the two are separate concepts.
+ * Delay measured at closure (actual vs. planned end of the testing/support
+ * phase, the project's final deadline) — distinct from
+ * `projects.support_delay_days`, which is the automation's ongoing daily
+ * estimate, per Supabase_Schema_Design.md's note that the two are separate concepts.
  */
 export function closureDelayDays(
-  project: Pick<Project, "planned_end_date" | "actual_end_date">
+  project: Pick<Project, "support_end_date" | "actual_end_date">
 ): number {
   if (!project.actual_end_date) return 0;
-  if (new Date(project.actual_end_date) <= new Date(project.planned_end_date)) return 0;
-  return daysBetween(project.planned_end_date, project.actual_end_date);
+  if (new Date(project.actual_end_date) <= new Date(project.support_end_date)) return 0;
+  return daysBetween(project.support_end_date, project.actual_end_date);
 }
 
 export type AssigneePayout = {

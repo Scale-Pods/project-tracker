@@ -67,7 +67,9 @@ function AddProjectModalContent({
     initialAddProjectState
   );
   const [rows, setRows] = useState<AssigneeRow[]>([{ key: "row-0" }]);
-  const [startDate, setStartDate] = useState("");
+  const [devStartDate, setDevStartDate] = useState("");
+  const [devEndDate, setDevEndDate] = useState("");
+  const [supportStartDate, setSupportStartDate] = useState("");
   const [projectValueDisplay, setProjectValueDisplay] = useState("");
   const rowCounter = useRef(1);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -190,58 +192,100 @@ function AddProjectModalContent({
             <FieldError message={errors.scope} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className={labelClasses} htmlFor="priority">
-                Priority
-              </label>
-              <select
-                id="priority"
-                name="priority"
-                required
-                defaultValue={state.submitted?.priority ?? ""}
-                className={inputClasses}
-              >
-                <option value="" disabled>
-                  Select
+          <div>
+            <label className={labelClasses} htmlFor="priority">
+              Priority
+            </label>
+            <select
+              id="priority"
+              name="priority"
+              required
+              defaultValue={state.submitted?.priority ?? ""}
+              className={`${inputClasses} sm:max-w-[220px]`}
+            >
+              <option value="" disabled>
+                Select
+              </option>
+              {PRIORITY_OPTIONS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
                 </option>
-                {PRIORITY_OPTIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <FieldError message={errors.priority} />
+              ))}
+            </select>
+            <FieldError message={errors.priority} />
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm text-text-primary">Development timeline</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClasses} htmlFor="devStartDate">
+                  Start date
+                </label>
+                <input
+                  id="devStartDate"
+                  name="devStartDate"
+                  type="date"
+                  required
+                  value={devStartDate}
+                  onChange={(e) => setDevStartDate(e.target.value)}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.devStartDate} />
+              </div>
+              <div>
+                <label className={labelClasses} htmlFor="devEndDate">
+                  End date
+                </label>
+                <input
+                  id="devEndDate"
+                  name="devEndDate"
+                  type="date"
+                  required
+                  min={devStartDate || undefined}
+                  value={devEndDate}
+                  onChange={(e) => setDevEndDate(e.target.value)}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.devEndDate} />
+              </div>
             </div>
-            <div>
-              <label className={labelClasses} htmlFor="startDate">
-                Start date
-              </label>
-              <input
-                id="startDate"
-                name="startDate"
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={inputClasses}
-              />
-              <FieldError message={errors.startDate} />
-            </div>
-            <div>
-              <label className={labelClasses} htmlFor="plannedEndDate">
-                Planned end date
-              </label>
-              <input
-                id="plannedEndDate"
-                name="plannedEndDate"
-                type="date"
-                required
-                min={startDate || undefined}
-                defaultValue={state.submitted?.plannedEndDate}
-                className={inputClasses}
-              />
-              <FieldError message={errors.plannedEndDate} />
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm text-text-primary">Testing/Support timeline</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClasses} htmlFor="supportStartDate">
+                  Start date
+                </label>
+                <input
+                  id="supportStartDate"
+                  name="supportStartDate"
+                  type="date"
+                  required
+                  min={devEndDate || undefined}
+                  value={supportStartDate}
+                  onChange={(e) => setSupportStartDate(e.target.value)}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.supportStartDate} />
+              </div>
+              <div>
+                <label className={labelClasses} htmlFor="supportEndDate">
+                  End date
+                </label>
+                <input
+                  id="supportEndDate"
+                  name="supportEndDate"
+                  type="date"
+                  required
+                  min={supportStartDate || undefined}
+                  defaultValue={state.submitted?.supportEndDate}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.supportEndDate} />
+              </div>
             </div>
           </div>
 

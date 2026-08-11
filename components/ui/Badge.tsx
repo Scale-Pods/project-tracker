@@ -1,5 +1,5 @@
 import { PAYOUT_ROLE_LABEL } from "@/lib/validation";
-import type { BandwidthStatus } from "@/lib/types";
+import { PHASE_LABEL, type BandwidthStatus, type ProjectPhase } from "@/lib/types";
 
 type BadgeTone = "good" | "warn" | "bad" | "accent" | "neutral" | "muted";
 
@@ -87,6 +87,17 @@ const SIDE_TONE: Record<string, BadgeTone> = {
 
 export function SideBadge({ side }: { side: string }) {
   return <Badge tone={SIDE_TONE[side.toLowerCase()] ?? "neutral"}>{side}</Badge>;
+}
+
+const PHASE_TONE: Record<ProjectPhase, BadgeTone> = {
+  development: "accent",
+  testing_support: "warn",
+};
+
+/** Which of the two onboarding timelines a blocker or pending task belongs to. */
+export function PhaseBadge({ phase }: { phase: string }) {
+  const key = phase as ProjectPhase;
+  return <Badge tone={PHASE_TONE[key] ?? "neutral"}>{PHASE_LABEL[key] ?? phase}</Badge>;
 }
 
 export function SourceBadge({ source }: { source: string }) {

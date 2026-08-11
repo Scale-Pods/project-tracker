@@ -1,4 +1,4 @@
-import { UnverifiedFlag } from "@/components/ui/Badge";
+import { PhaseBadge, UnverifiedFlag } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { daysBetween, formatDate } from "@/lib/format";
@@ -58,6 +58,7 @@ export function PendingTasksSection({ tasks }: { tasks: PendingTask[] }) {
                             {t.description}
                           </p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+                            <PhaseBadge phase={t.phase} />
                             {done && t.completed_date ? (
                               <span>Completed {formatDate(t.completed_date)}</span>
                             ) : (

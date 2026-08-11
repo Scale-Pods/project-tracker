@@ -18,10 +18,11 @@ export function ProjectCard({
   style?: React.CSSProperties;
 }) {
   const progress = computeTimelineProgress(
-    project.start_date,
-    project.planned_end_date,
+    project.dev_start_date,
+    project.support_end_date,
     project.actual_end_date
   );
+  const totalDelay = project.dev_delay_days + project.support_delay_days;
   const visibleAssignees = project.assignees.slice(0, 3);
   const overflowCount = project.assignees.length - visibleAssignees.length;
   const isClosed = Boolean(project.actual_end_date);
@@ -65,16 +66,16 @@ export function ProjectCard({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StageBadge stage={project.stage} />
           <PriorityBadge priority={project.priority} />
-          {project.delay_days > 0 && (
+          {totalDelay > 0 && (
             <span className="inline-flex items-center rounded-full border border-status-bad/60 bg-status-bad/20 px-2.5 py-1 text-xs font-semibold text-status-bad shadow-[0_0_16px_-6px_var(--color-status-bad)]">
-              {project.delay_days}d behind
+              {totalDelay}d behind
             </span>
           )}
         </div>
 
         <div className="mt-5 space-y-1.5">
           <div className="flex items-center justify-between text-xs text-text-secondary">
-            <span>{formatDateRange(project.start_date, project.planned_end_date)}</span>
+            <span>{formatDateRange(project.dev_start_date, project.support_end_date)}</span>
             <span className="font-medium tabular-nums text-text-primary">
               {isClosed ? "Closed" : `${progress}%`}
             </span>

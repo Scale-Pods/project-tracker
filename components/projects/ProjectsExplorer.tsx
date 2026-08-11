@@ -19,11 +19,11 @@ import {
 
 const STATUS_OPTIONS = ["On Track", "At Risk", "Delayed"];
 
-type SortOption = "updated_at" | "planned_end_date" | "project_value";
+type SortOption = "updated_at" | "support_end_date" | "project_value";
 
 const SORT_LABELS: Record<SortOption, string> = {
   updated_at: "Last updated",
-  planned_end_date: "Soonest deadline",
+  support_end_date: "Soonest deadline",
   project_value: "Highest value",
 };
 
@@ -76,9 +76,9 @@ export function ProjectsExplorer({
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
-    if (sort === "planned_end_date") {
+    if (sort === "support_end_date") {
       copy.sort(
-        (a, b) => new Date(a.planned_end_date).getTime() - new Date(b.planned_end_date).getTime()
+        (a, b) => new Date(a.support_end_date).getTime() - new Date(b.support_end_date).getTime()
       );
     } else if (sort === "project_value") {
       copy.sort((a, b) => b.project_value - a.project_value);

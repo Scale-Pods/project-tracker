@@ -1,4 +1,4 @@
-import { SideBadge, UnverifiedFlag } from "@/components/ui/Badge";
+import { PhaseBadge, SideBadge, UnverifiedFlag } from "@/components/ui/Badge";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { daysBetween, formatDate } from "@/lib/format";
 import type { Blocker } from "@/lib/types";
@@ -47,6 +47,7 @@ export function BlockersSection({ blockers }: { blockers: Blocker[] }) {
 
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <SideBadge side={b.side} />
+                        <PhaseBadge phase={b.phase} />
                         <span className="text-[11px] text-text-secondary">
                           Open {daysBetween(b.first_seen_date, b.last_mentioned_date)}d
                         </span>

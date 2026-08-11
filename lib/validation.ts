@@ -11,8 +11,10 @@ export type AddProjectInput = {
   projectName: string;
   scope: string;
   priority: string;
-  startDate: string;
-  plannedEndDate: string;
+  devStartDate: string;
+  devEndDate: string;
+  supportStartDate: string;
+  supportEndDate: string;
   projectValue: string;
   notes: string;
   assignees: AssigneeInput[];
@@ -54,14 +56,31 @@ export function validateAddProjectInput(input: AddProjectInput): {
   if (!PRIORITY_OPTIONS.includes(input.priority as (typeof PRIORITY_OPTIONS)[number])) {
     errors.priority = "Select a priority.";
   }
-  if (!input.startDate) errors.startDate = "Start date is required.";
-  if (!input.plannedEndDate) errors.plannedEndDate = "Planned end date is required.";
+  if (!input.devStartDate) errors.devStartDate = "Development start date is required.";
+  if (!input.devEndDate) errors.devEndDate = "Development end date is required.";
   if (
-    input.startDate &&
-    input.plannedEndDate &&
-    new Date(input.plannedEndDate) <= new Date(input.startDate)
+    input.devStartDate &&
+    input.devEndDate &&
+    new Date(input.devEndDate) <= new Date(input.devStartDate)
   ) {
-    errors.plannedEndDate = "Planned end date must be after the start date.";
+    errors.devEndDate = "Development end date must be after the development start date.";
+  }
+
+  if (!input.supportStartDate) errors.supportStartDate = "Testing/Support start date is required.";
+  if (!input.supportEndDate) errors.supportEndDate = "Testing/Support end date is required.";
+  if (
+    input.devEndDate &&
+    input.supportStartDate &&
+    new Date(input.supportStartDate) < new Date(input.devEndDate)
+  ) {
+    errors.supportStartDate = "Testing/Support can't start before development ends.";
+  }
+  if (
+    input.supportStartDate &&
+    input.supportEndDate &&
+    new Date(input.supportEndDate) <= new Date(input.supportStartDate)
+  ) {
+    errors.supportEndDate = "Testing/Support end date must be after its start date.";
   }
 
   const dealSize = Number(input.projectValue.replace(/,/g, ""));

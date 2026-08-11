@@ -49,9 +49,14 @@ export function ProjectHeader({
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <StageBadge stage={project.stage} />
           <PriorityBadge priority={project.priority} />
-          {project.delay_days > 0 && (
+          {project.dev_delay_days > 0 && (
             <span className="inline-flex items-center rounded-full border border-status-bad/60 bg-status-bad/20 px-2.5 py-1 text-xs font-semibold text-status-bad shadow-[0_0_16px_-6px_var(--color-status-bad)]">
-              {project.delay_days}d behind schedule
+              {project.dev_delay_days}d behind on development
+            </span>
+          )}
+          {project.support_delay_days > 0 && (
+            <span className="inline-flex items-center rounded-full border border-status-bad/60 bg-status-bad/20 px-2.5 py-1 text-xs font-semibold text-status-bad shadow-[0_0_16px_-6px_var(--color-status-bad)]">
+              {project.support_delay_days}d behind on testing/support
             </span>
           )}
         </div>
@@ -65,12 +70,15 @@ export function ProjectHeader({
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-border-subtle pt-6 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-border-subtle pt-6 sm:grid-cols-3 lg:grid-cols-5">
           <Stat label="Deal size" value={formatCurrency(project.project_value)} />
           <Stat
-            className="col-span-2 sm:col-span-1"
-            label="Timeline"
-            value={formatDateRange(project.start_date, project.planned_end_date)}
+            label="Development timeline"
+            value={formatDateRange(project.dev_start_date, project.dev_end_date)}
+          />
+          <Stat
+            label="Testing/Support timeline"
+            value={formatDateRange(project.support_start_date, project.support_end_date)}
           />
           <Stat label="Added on" value={formatDate(project.created_at)} />
           <Stat label="Last updated" value={formatDate(project.updated_at)} />

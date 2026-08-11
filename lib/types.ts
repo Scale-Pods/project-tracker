@@ -5,6 +5,18 @@ export type ProjectStatus = "On Track" | "At Risk" | "Delayed";
 export type Priority = "High" | "Medium" | "Low";
 export type PayoutRole = "Owner" | "Support";
 
+// A project onboards with two separate timelines: build the thing
+// ("development"), then keep it running / verify it with the client
+// ("testing_support"). Blockers and pending tasks are tagged with whichever
+// phase they were raised in, so delay/progress can be computed against the
+// timeline that's actually relevant to them.
+export type ProjectPhase = "development" | "testing_support";
+
+export const PHASE_LABEL: Record<ProjectPhase, string> = {
+  development: "Development",
+  testing_support: "Testing/Support",
+};
+
 export const CANONICAL_STAGES = [
   "Onboarding",
   "In Progress",
@@ -21,13 +33,16 @@ export type Project = {
   priority: string;
   status: string;
   stage: string;
-  start_date: string;
-  planned_end_date: string;
+  dev_start_date: string;
+  dev_end_date: string;
+  support_start_date: string;
+  support_end_date: string;
   actual_end_date: string | null;
   notes: string | null;
   project_value: number;
   client_rating: number | null;
-  delay_days: number;
+  dev_delay_days: number;
+  support_delay_days: number;
   awaiting_closure_data: boolean;
   unverified: boolean;
   created_at: string;
@@ -61,6 +76,7 @@ export type Blocker = {
   side: string;
   status: string;
   unverified: boolean;
+  phase: string;
   first_seen_date: string;
   last_mentioned_date: string;
   resolved_date: string | null;
@@ -74,6 +90,7 @@ export type PendingTask = {
   description: string;
   status: string;
   unverified: boolean;
+  phase: string;
   first_mentioned_date: string;
   last_mentioned_date: string;
   completed_date: string | null;
@@ -144,8 +161,10 @@ export type Database = {
             | "project_name"
             | "scope"
             | "priority"
-            | "start_date"
-            | "planned_end_date"
+            | "dev_start_date"
+            | "dev_end_date"
+            | "support_start_date"
+            | "support_end_date"
             | "project_value"
           >;
         Update: Partial<Project>;

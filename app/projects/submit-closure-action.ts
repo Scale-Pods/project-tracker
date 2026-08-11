@@ -42,7 +42,7 @@ export async function submitClosure(
 
   const { data: existingProject, error: fetchError } = await supabase
     .from("projects")
-    .select("planned_end_date")
+    .select("support_end_date")
     .eq("id", input.projectId)
     .single();
 
@@ -55,10 +55,12 @@ export async function submitClosure(
 
   // Closing a project fixes its schedule and health for good — "At Risk" and
   // an ongoing "behind schedule" badge only make sense while work is still in
-  // flight, so closure recomputes delay_days/status from the final dates
-  // instead of leaving them frozen at whatever the daily cron last wrote.
+  // flight, so closure recomputes support_delay_days/status from the final
+  // dates instead of leaving them frozen at whatever the daily cron last
+  // wrote. dev_delay_days is left untouched — the development phase already
+  // finished earlier and its recorded delay doesn't change at closure.
   const delayDays = closureDelayDays({
-    planned_end_date: existingProject.planned_end_date,
+    support_end_date: existingProject.support_end_date,
     actual_end_date: input.actualEndDate,
   });
 
@@ -71,7 +73,7 @@ export async function submitClosure(
       awaiting_closure_data: false,
       stage: "Completed",
       status: delayDays > 0 ? "Delayed" : "On Track",
-      delay_days: delayDays,
+      support_delay_days: delayDays,
     })
     .eq("id", input.projectId)
     .select()
