@@ -20,7 +20,7 @@ import { DetailErrorBanner } from "@/components/projects/DetailErrorBanner";
 export const dynamic = "force-dynamic";
 
 // The summary is the one part of this page waiting on a non-Supabase network
-// call (Gemini), so it streams in its own Suspense boundary rather than
+// call (Claude), so it streams in its own Suspense boundary rather than
 // blocking the rest of the already-fetched page.
 function ProjectSummarySkeleton() {
   return (

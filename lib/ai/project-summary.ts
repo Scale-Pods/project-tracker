@@ -1,6 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { generateText } from "@/lib/ai/gemini-client";
+import { generateText } from "@/lib/ai/claude-client";
 import { daysBetween, toDateKey } from "@/lib/format";
 import type { Blocker, Milestone, PendingTask, Project, RemarksLogEntry } from "@/lib/types";
 

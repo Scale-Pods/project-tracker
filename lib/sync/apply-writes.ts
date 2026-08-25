@@ -4,9 +4,9 @@ import type { FirefliesMeetingDetails } from "@/lib/fireflies/client";
 import type { SyncContext } from "@/lib/sync/fetch-sync-context";
 import type { ExtractionResult, ExtractionSegment } from "@/lib/sync/sync-extraction";
 
-// Confidence-routing thresholds, prompt.md Section 6.5. Gemini assigns a
+// Confidence-routing thresholds, prompt.md Section 6.5. Claude assigns a
 // confidence per statement; this is the one place that decides where it
-// actually lands. Never trust Gemini's own opinion on which table to write.
+// actually lands. Never trust Claude's own opinion on which table to write.
 const LIVE_THRESHOLD = 0.8;
 const REVIEW_THRESHOLD = 0.5;
 

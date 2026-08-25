@@ -38,7 +38,7 @@ export type FirefliesMeetingListItem = {
 };
 
 // Raw GraphQL call, no SDK dependency — mirrors the fetch pattern already
-// used in lib/ai/gemini-client.ts. Key check lives inside each call so a
+// used in lib/ai/claude-client.ts. Key check lives inside each call so a
 // missing key surfaces as a caught rejection in the sync pipeline, not a
 // module-load crash.
 async function firefliesRequest<T>(query: string, variables: Record<string, unknown>): Promise<T> {
@@ -145,7 +145,7 @@ export async function getMeetingDetails(transcriptId: string): Promise<Fireflies
 }
 
 // Orientation-only summary — replaces "Get Meeting Summary". Used solely to
-// help Gemini orient on a long transcript; never as the sole extraction
+// help Claude orient on a long transcript; never as the sole extraction
 // source (it drops speaker attribution).
 export async function getMeetingSummary(transcriptId: string): Promise<FirefliesMeetingSummary | null> {
   const query = `

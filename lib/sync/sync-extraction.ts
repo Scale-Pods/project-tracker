@@ -1,172 +1,88 @@
 import "server-only";
-import { generateStructured } from "@/lib/ai/gemini-client";
+import { z } from "zod";
+import { generateStructured } from "@/lib/ai/claude-client";
 import type { FirefliesMeetingDetails } from "@/lib/fireflies/client";
 import type { SyncContext } from "@/lib/sync/fetch-sync-context";
 import { resolveSpeaker } from "@/lib/sync/resolve-speaker";
 
-export type BlockerWrite = {
-  action: "insert" | "update";
-  matchedBlockerId: string | null;
-  description: string;
-  side: "client" | "internal";
-  status: "new" | "persisting" | "resolved";
-  raisedBy: string | null;
-  firstSeenDate: string;
-  lastMentionedDate: string;
-  resolvedDate: string | null;
-  confidence: number;
-};
+const BlockerWriteSchema = z.object({
+  action: z.enum(["insert", "update"]),
+  matchedBlockerId: z.string().nullable(),
+  description: z.string(),
+  side: z.enum(["client", "internal"]),
+  status: z.enum(["new", "persisting", "resolved"]),
+  raisedBy: z.string().nullable(),
+  firstSeenDate: z.string(),
+  lastMentionedDate: z.string(),
+  resolvedDate: z.string().nullable(),
+  confidence: z.number(),
+});
+export type BlockerWrite = z.infer<typeof BlockerWriteSchema>;
 
-export type TaskWrite = {
-  action: "insert" | "update";
-  matchedTaskId: string | null;
-  assigneeName: string;
-  description: string;
-  status: "open" | "done";
-  firstMentionedDate: string;
-  lastMentionedDate: string;
-  completedDate: string | null;
+const TaskWriteSchema = z.object({
+  action: z.enum(["insert", "update"]),
+  matchedTaskId: z.string().nullable(),
+  assigneeName: z.string(),
+  description: z.string(),
+  status: z.enum(["open", "done"]),
+  firstMentionedDate: z.string(),
+  lastMentionedDate: z.string(),
+  completedDate: z.string().nullable(),
   // Absolute target date, derived from whatever estimate was stated this
   // meeting (e.g. "2 days" -> meeting date + 2). Set on every mention that
   // carries a duration/estimate, even a repeated one — the write layer
   // compares it against the previously stored due_date itself and only
   // narrates a change when it actually differs, so re-stating the same
   // estimate is a harmless no-op, not a fabricated "revision".
-  dueDate: string | null;
-  confidence: number;
-};
+  dueDate: z.string().nullable(),
+  confidence: z.number(),
+});
+export type TaskWrite = z.infer<typeof TaskWriteSchema>;
 
-export type MilestoneWrite = {
-  name: string;
-  status: "not_started" | "in_progress" | "done";
-  confidence: number;
-};
+const MilestoneWriteSchema = z.object({
+  name: z.string(),
+  status: z.enum(["not_started", "in_progress", "done"]),
+  confidence: z.number(),
+});
+export type MilestoneWrite = z.infer<typeof MilestoneWriteSchema>;
 
-export type RemarkWrite = {
-  summary: string;
-  confidence: number;
-};
+const RemarkWriteSchema = z.object({
+  summary: z.string(),
+  confidence: z.number(),
+});
+export type RemarkWrite = z.infer<typeof RemarkWriteSchema>;
 
-export type StageChange = {
-  newStage: string;
-  confidence: number;
-};
+const StageChangeSchema = z.object({
+  newStage: z.string(),
+  confidence: z.number(),
+});
+export type StageChange = z.infer<typeof StageChangeSchema>;
 
-export type ExtractionSegment = {
-  projectId: string | null;
-  projectMatchConfidence: number;
-  unmatchedSnippet: string | null;
-  blockers: BlockerWrite[];
-  pendingTasks: TaskWrite[];
-  milestones: MilestoneWrite[];
-  remarks: RemarkWrite[];
-  stageChange: StageChange | null;
-  awaitingClosure: boolean;
-};
+const ExtractionSegmentSchema = z.object({
+  projectId: z.string().nullable(),
+  projectMatchConfidence: z.number(),
+  unmatchedSnippet: z.string().nullable(),
+  blockers: z.array(BlockerWriteSchema),
+  pendingTasks: z.array(TaskWriteSchema),
+  milestones: z.array(MilestoneWriteSchema),
+  remarks: z.array(RemarkWriteSchema),
+  stageChange: StageChangeSchema.nullable(),
+  awaitingClosure: z.boolean(),
+});
+export type ExtractionSegment = z.infer<typeof ExtractionSegmentSchema>;
 
-export type ExtractionResult = {
-  notAProjectMeeting: boolean;
-  noConfidentMatch: boolean;
-  segments: ExtractionSegment[];
-};
-
-const RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    notAProjectMeeting: { type: "BOOLEAN" },
-    noConfidentMatch: { type: "BOOLEAN" },
-    segments: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          projectId: { type: "STRING", nullable: true },
-          projectMatchConfidence: { type: "NUMBER" },
-          unmatchedSnippet: { type: "STRING", nullable: true },
-          blockers: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                action: { type: "STRING", enum: ["insert", "update"] },
-                matchedBlockerId: { type: "STRING", nullable: true },
-                description: { type: "STRING" },
-                side: { type: "STRING", enum: ["client", "internal"] },
-                status: { type: "STRING", enum: ["new", "persisting", "resolved"] },
-                raisedBy: { type: "STRING", nullable: true },
-                firstSeenDate: { type: "STRING" },
-                lastMentionedDate: { type: "STRING" },
-                resolvedDate: { type: "STRING", nullable: true },
-                confidence: { type: "NUMBER" },
-              },
-              required: ["action", "description", "side", "status", "firstSeenDate", "lastMentionedDate", "confidence"],
-            },
-          },
-          pendingTasks: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                action: { type: "STRING", enum: ["insert", "update"] },
-                matchedTaskId: { type: "STRING", nullable: true },
-                assigneeName: { type: "STRING" },
-                description: { type: "STRING" },
-                status: { type: "STRING", enum: ["open", "done"] },
-                firstMentionedDate: { type: "STRING" },
-                lastMentionedDate: { type: "STRING" },
-                completedDate: { type: "STRING", nullable: true },
-                dueDate: { type: "STRING", nullable: true },
-                confidence: { type: "NUMBER" },
-              },
-              required: ["action", "assigneeName", "description", "status", "firstMentionedDate", "lastMentionedDate", "confidence"],
-            },
-          },
-          milestones: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                name: { type: "STRING" },
-                status: { type: "STRING", enum: ["not_started", "in_progress", "done"] },
-                confidence: { type: "NUMBER" },
-              },
-              required: ["name", "status", "confidence"],
-            },
-          },
-          remarks: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                summary: { type: "STRING" },
-                confidence: { type: "NUMBER" },
-              },
-              required: ["summary", "confidence"],
-            },
-          },
-          stageChange: {
-            type: "OBJECT",
-            nullable: true,
-            properties: {
-              newStage: { type: "STRING" },
-              confidence: { type: "NUMBER" },
-            },
-            required: ["newStage", "confidence"],
-          },
-          awaitingClosure: { type: "BOOLEAN" },
-        },
-        required: ["projectId", "projectMatchConfidence", "blockers", "pendingTasks", "milestones", "remarks", "awaitingClosure"],
-      },
-    },
-  },
-  required: ["notAProjectMeeting", "noConfidentMatch", "segments"],
-};
+const ExtractionResultSchema = z.object({
+  notAProjectMeeting: z.boolean(),
+  noConfidentMatch: z.boolean(),
+  segments: z.array(ExtractionSegmentSchema),
+});
+export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;
 
 // Distilled from prompt.md Sections 4.3, 6.2-6.6 and the Section 9 worked
 // examples. Kept as a versioned constant (not a runtime read of prompt.md) so
 // changes to the ruleset show up as a reviewable diff. Confidence-routing
 // (<0.5 -> pending_review_queue, 0.5-0.8 -> unverified, >=0.8 -> live) is
-// deliberately NOT delegated here — Gemini only assigns confidence per
+// deliberately NOT delegated here — Claude only assigns confidence per
 // statement; lib/sync/apply-writes.ts makes the routing decision in code.
 const RULESET = `
 You are extracting structured project-tracker updates from one Fireflies meeting transcript, replicating rules a human project-tracker assistant follows. You do not decide database routing yourself — you assign a confidence (0.0-1.0) per statement and describe what you observed; the calling system decides where each item is written based on that confidence.
@@ -268,9 +184,7 @@ Date: ${transcript.dateString}
 Attendees: ${transcript.participants.join(", ")}
 
 ## Transcript
-${transcriptBody}
-
-Respond with JSON matching the required schema only.`;
+${transcriptBody}`;
 }
 
 export async function extractFromTranscript(
@@ -278,11 +192,8 @@ export async function extractFromTranscript(
   context: SyncContext
 ): Promise<{ result: ExtractionResult; rawResponse: string }> {
   const prompt = buildPrompt(transcript, context);
-  const model = process.env.GEMINI_SYNC_MODEL;
 
-  const result = await generateStructured<ExtractionResult>(prompt, RESPONSE_SCHEMA, {
-    model,
-  });
+  const result = await generateStructured(prompt, ExtractionResultSchema);
 
   return { result, rawResponse: JSON.stringify(result) };
 }

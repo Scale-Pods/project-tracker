@@ -7,7 +7,7 @@ export type SpeakerResolution =
 // Deterministic speaker -> roster-name resolution, per prompt.md Section 6.3.
 // Kept out of the LLM prompt on purpose: name matching against a known
 // roster is a rule-based lookup, not a judgment call, so it runs in code and
-// Gemini receives the resolution (or "ambiguous") rather than raw
+// Claude receives the resolution (or "ambiguous") rather than raw
 // speaker strings it would have to guess at.
 //
 // `speaker` is either an email address (Fireflies gives emails for

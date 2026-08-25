@@ -151,7 +151,7 @@ export type SyncRun = {
   trigger: SyncRunTrigger;
   status: SyncRunStatus;
   error_message: string | null;
-  gemini_raw_response: string | null;
+  llm_raw_response: string | null;
   started_at: string;
   finished_at: string | null;
 };

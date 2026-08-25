@@ -24,7 +24,7 @@ The dashboard never re-interprets or overrides what the automation writes — AI
 
 - **Next.js 16 (App Router)** + **TypeScript**, **React 19**
 - **Supabase** (Postgres) as the single source of truth — all reads/writes happen server-side via Server Components and Server Actions, using the service role key so RLS never blocks legitimate app traffic
-- **Gemini API** generates the plain-language project summary shown on each detail page, computed from the same rows already fetched for the rest of the page and cached for an hour (or until the underlying data changes)
+- **Claude API** generates the plain-language project summary shown on each detail page, computed from the same rows already fetched for the rest of the page and cached for an hour (or until the underlying data changes)
 - **Tailwind CSS** for a dark, glass-surfaced design system built around ScalePods' brand indigo
 
 ```
@@ -44,5 +44,5 @@ app/projects/            Routes: list page, detail page, and server actions
 components/projects/     Feature components (cards, modals, detail sections)
 components/ui/           Shared design-system primitives (badges, progress bars, skeletons)
 lib/                     Supabase client, typed queries, incentive-payout math,
-                          Gemini integration, validation
+                          Claude integration, validation
 ```

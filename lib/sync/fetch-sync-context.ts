@@ -1,7 +1,7 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
 
-// One batched read of everything Gemini needs to do project matching, speaker
+// One batched read of everything Claude needs to do project matching, speaker
 // resolution, and semantic dedup for a transcript — mirrors prompt.md
 // Section 5 Step 1's single Supabase read. Only active projects
 // (actual_end_date IS NULL) are included; closed projects never receive

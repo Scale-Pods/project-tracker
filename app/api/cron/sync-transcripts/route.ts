@@ -9,7 +9,7 @@ export const maxDuration = 300;
 
 // The reconciliation pass always looks at just the most recent N occurrences
 // of one recurring meeting, not a date window or an account-wide listing —
-// keeps each cron run's Fireflies listing and Gemini spend bounded, and
+// keeps each cron run's Fireflies listing and Claude spend bounded, and
 // keeps this in sync with the Fireflies webhook, which is itself filtered
 // to only fire for this same meeting title.
 const RECONCILE_MEETING_COUNT = 10;

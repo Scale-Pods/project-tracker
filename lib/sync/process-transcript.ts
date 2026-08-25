@@ -26,7 +26,7 @@ export async function processTranscript(
   const supabase = createServiceRoleClient();
   const dryRun = options.dryRun ?? false;
 
-  // Idempotency layer 1: cheap check before spending a Gemini call. The
+  // Idempotency layer 1: cheap check before spending an LLM call. The
   // advisory lock inside the RPCs is the layer-2 guard against a true race;
   // ON CONFLICT DO NOTHING on the final insert is layer 3.
   const { data: existing, error: existingError } = await supabase
@@ -61,7 +61,7 @@ export async function processTranscript(
     if (dryRun) {
       await supabase
         .from("sync_runs")
-        .update({ status: "success", gemini_raw_response: rawResponse, finished_at: new Date().toISOString() })
+        .update({ status: "success", llm_raw_response: rawResponse, finished_at: new Date().toISOString() })
         .eq("id", runRow.id);
       return { status: "success" };
     }
@@ -82,7 +82,7 @@ export async function processTranscript(
       .from("sync_runs")
       .update({
         status: outcome.status,
-        gemini_raw_response: rawResponse,
+        llm_raw_response: rawResponse,
         finished_at: new Date().toISOString(),
       })
       .eq("id", runRow.id);
