@@ -1,6 +1,6 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
-import { getMeetingDetails } from "@/lib/fireflies/client";
+import { getMeetingDetails, getMeetingSummary } from "@/lib/fireflies/client";
 import { fetchSyncContext } from "@/lib/sync/fetch-sync-context";
 import { extractFromTranscript } from "@/lib/sync/sync-extraction";
 import { applyExtractionResult, buildRawSnippet, touchedProjectIds } from "@/lib/sync/apply-writes";
@@ -56,7 +56,14 @@ export async function processTranscript(
   try {
     const transcript = await getMeetingDetails(transcriptId);
     const context = await fetchSyncContext();
-    const { result, rawResponse } = await extractFromTranscript(transcript, context);
+
+    // Orientation-only aid for long meetings — never the sole extraction
+    // source (see sync-extraction.ts's ruleset). Optional: if Fireflies'
+    // summary endpoint fails, proceed with the transcript alone rather than
+    // failing the whole sync over a non-essential fetch.
+    const summary = await getMeetingSummary(transcriptId).catch(() => null);
+
+    const { result, rawResponse } = await extractFromTranscript(transcript, context, summary);
 
     if (dryRun) {
       await supabase
