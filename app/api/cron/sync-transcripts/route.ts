@@ -20,6 +20,13 @@ export const maxDuration = 800;
 const RECONCILE_MEETING_COUNT = 10;
 const RECONCILE_MEETING_TITLE = "Catchup Tech Team | ScalePods";
 
+// Caps how many transcripts one invocation processes, so a backlog (several
+// missed webhooks, or a one-off manual backfill) can never make a single
+// request exceed maxDuration — a long transcript alone can take a couple of
+// minutes. Any remainder just gets picked up by the next run (daily cron,
+// or a manual re-trigger), since processing is idempotent per transcript.
+const BATCH_LIMIT = 3;
+
 // Daily safety net: reconciles any of the last 10 occurrences of the
 // Catchup Tech Team stand-up the webhook missed, then does a portfolio-wide
 // delay/status sweep so calendar-day drift (a project silently becoming
@@ -49,10 +56,18 @@ export async function GET(request: NextRequest) {
   }
 
   const processedIds = new Set((processed ?? []).map((p) => p.fireflies_transcript_id));
-  const unprocessed = meetings.filter((m) => !processedIds.has(m.id));
+
+  // Oldest first (prompt.md Section 5 Step 4: "so later meetings correctly
+  // supersede earlier ones") — searchMeetings returns newest-first, so
+  // reverse before filtering/batching.
+  const unprocessed = meetings
+    .filter((m) => !processedIds.has(m.id))
+    .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime());
+
+  const batch = unprocessed.slice(0, BATCH_LIMIT);
 
   const results = [];
-  for (const meeting of unprocessed) {
+  for (const meeting of batch) {
     const result = await processTranscript(meeting.id, { trigger: "cron" });
     results.push({ meetingId: meeting.id, ...result });
   }
@@ -61,7 +76,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     checked: meetings.length,
-    processed: results.length,
+    unprocessedFound: unprocessed.length,
+    processedThisRun: results.length,
+    remaining: unprocessed.length - batch.length,
     results,
   });
 }
