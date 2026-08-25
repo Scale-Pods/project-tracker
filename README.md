@@ -1,6 +1,6 @@
 # ScalePods Project Tracker
 
-An dashboard     that gives the ScalePods team one place to see the live status of every client project — replacing manual spreadsheet check-ins with a real-time view of health, blockers, tasks, team workload, and payouts.
+An internal dashboard that gives the ScalePods team one place to see the live status of every client project — replacing manual spreadsheet check-ins with a real-time view of health, blockers, tasks, team workload, and payouts.
 
 ## What it does
 

@@ -1,5 +1,6 @@
-// Hand-written types matching Supabase_Schema_Design.md. Only the tables this
-// dashboard touches are modeled here (projects, project_assignees, remarks_log).
+// Hand-written types matching Supabase_Schema_Design.md, covering both the
+// tables the dashboard reads and the ones the Fireflies sync pipeline
+// (lib/sync/**) writes to.
 
 export type ProjectStatus = "On Track" | "At Risk" | "Delayed";
 export type Priority = "High" | "Medium" | "Low";
@@ -89,6 +90,70 @@ export type Milestone = {
   name: string;
   status: string;
   updated_at: string;
+};
+
+export type ProjectStage = {
+  name: string;
+  sort_order: number;
+  completion_fraction: number;
+  is_terminal: boolean;
+};
+
+export type PendingReviewQueueEntry = {
+  id: string;
+  project_id: string;
+  field_name: string;
+  proposed_value: string | null;
+  confidence: number | null;
+  source_meeting_id: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type NeedsRegistrationQueueEntry = {
+  id: string;
+  fireflies_transcript_id: string;
+  meeting_title: string | null;
+  attendees: string[] | null;
+  raw_snippet: string | null;
+  status: "pending" | "resolved" | "dismissed";
+  resolved_project_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+export type ProcessedTranscript = {
+  id: string;
+  fireflies_transcript_id: string;
+  processed_at: string;
+  meeting_date: string | null;
+  meeting_title: string | null;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  project_id: string;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  source: "onboarding" | "fireflies" | "delay_computation" | "payout_engine" | "human_review";
+  source_meeting_id: string | null;
+  confidence: number | null;
+  changed_at: string;
+};
+
+export type SyncRunStatus = "success" | "failed" | "skipped_duplicate" | "no_confident_match";
+export type SyncRunTrigger = "webhook" | "cron";
+
+export type SyncRun = {
+  id: string;
+  fireflies_transcript_id: string;
+  trigger: SyncRunTrigger;
+  status: SyncRunStatus;
+  error_message: string | null;
+  gemini_raw_response: string | null;
+  started_at: string;
+  finished_at: string | null;
 };
 
 // A project row plus the lightweight assignee-name join used on the list page.
@@ -188,8 +253,68 @@ export type Database = {
         Update: Partial<Milestone>;
         Relationships: [];
       };
+      project_stages: {
+        Row: ProjectStage;
+        Insert: ProjectStage;
+        Update: Partial<ProjectStage>;
+        Relationships: [];
+      };
+      pending_review_queue: {
+        Row: PendingReviewQueueEntry;
+        Insert: Partial<PendingReviewQueueEntry> &
+          Pick<PendingReviewQueueEntry, "project_id" | "field_name">;
+        Update: Partial<PendingReviewQueueEntry>;
+        Relationships: [];
+      };
+      needs_registration_queue: {
+        Row: NeedsRegistrationQueueEntry;
+        Insert: Partial<NeedsRegistrationQueueEntry> & Pick<NeedsRegistrationQueueEntry, "fireflies_transcript_id">;
+        Update: Partial<NeedsRegistrationQueueEntry>;
+        Relationships: [];
+      };
+      processed_transcripts: {
+        Row: ProcessedTranscript;
+        Insert: Partial<ProcessedTranscript> & Pick<ProcessedTranscript, "fireflies_transcript_id">;
+        Update: Partial<ProcessedTranscript>;
+        Relationships: [];
+      };
+      audit_log: {
+        Row: AuditLogEntry;
+        Insert: Partial<AuditLogEntry> &
+          Pick<AuditLogEntry, "project_id" | "field_changed" | "source">;
+        Update: Partial<AuditLogEntry>;
+        Relationships: [];
+      };
+      sync_runs: {
+        Row: SyncRun;
+        Insert: Partial<SyncRun> & Pick<SyncRun, "fireflies_transcript_id" | "trigger" | "status">;
+        Update: Partial<SyncRun>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      apply_transcript_segment: {
+        Args: {
+          p_project_id: string;
+          p_writes: Record<string, unknown>;
+          p_transcript_id: string;
+          p_meeting_date: string;
+          p_meeting_title: string;
+          p_is_last_segment: boolean;
+        };
+        Returns: Record<string, unknown>;
+      };
+      log_unmatched_meeting: {
+        Args: {
+          p_transcript_id: string;
+          p_meeting_date: string;
+          p_meeting_title: string;
+          p_attendees: string[];
+          p_raw_snippet: string;
+        };
+        Returns: undefined;
+      };
+    };
   };
 };
