@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { computeMilestoneProgress, computeTimelineProgress, formatDate } from "@/lib/format";
-import type { Milestone, PendingTask, Project } from "@/lib/types";
+import type { Milestone, PendingTask, Project, TimelineWindow } from "@/lib/types";
 
 const HEALTH_STYLES: Record<
   "good" | "warn" | "bad",
@@ -50,18 +50,20 @@ export function ProgressOverview({
   project,
   milestones,
   pendingTasks,
+  timelineWindow,
 }: {
   project: Project;
   milestones: Milestone[];
   pendingTasks: PendingTask[];
+  timelineWindow: TimelineWindow;
 }) {
   const timelineProgress = computeTimelineProgress(
-    project.dev_start_date,
-    project.dev_end_date,
+    timelineWindow.start,
+    timelineWindow.end,
     project.actual_end_date
   );
   const isClosed = Boolean(project.actual_end_date);
-  const milestoneProgress = computeMilestoneProgress(milestones, pendingTasks);
+  const milestoneProgress = computeMilestoneProgress(pendingTasks);
   const health = HEALTH_STYLES[STATUS_TONE[project.status] ?? "good"];
 
   return (
@@ -102,8 +104,8 @@ export function ProgressOverview({
               <ProgressBar value={timelineProgress} tone="accent" label="Timeline progress" />
             </div>
             <div className="mt-1.5 flex justify-between text-[11px] text-text-secondary">
-              <span>{formatDate(project.dev_start_date)}</span>
-              <span>{formatDate(project.dev_end_date)}</span>
+              <span>{formatDate(timelineWindow.start)}</span>
+              <span>{formatDate(timelineWindow.end)}</span>
             </div>
           </div>
 

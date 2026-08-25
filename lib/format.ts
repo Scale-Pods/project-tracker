@@ -77,6 +77,33 @@ export function computeTimelineProgress(
   return Math.round(Math.min(1, Math.max(0, ratio)) * 100);
 }
 
+export type TimelineWindow = { start: string; end: string };
+
+/** Which calendar window "Timeline progress" should measure against: the
+ * dev window while the project's current stage is at or below the
+ * Development-stage boundary, the support window once it's past that —
+ * mirroring the same phase split used for delay computation (recompute-delay.ts),
+ * so the progress bar and the delay/status badge always agree on which
+ * window is "current". Without this, a project that has moved into
+ * Testing/UAT/Client Review would stay pinned at a clamped 100% against a
+ * dev window that already closed, instead of reflecting the window it's
+ * actually in now. */
+export function resolveTimelineWindow(
+  project: {
+    dev_start_date: string;
+    dev_end_date: string;
+    support_start_date: string;
+    support_end_date: string;
+  },
+  stageFraction: number,
+  devBoundaryFraction: number
+): TimelineWindow {
+  const inDevPhase = stageFraction <= devBoundaryFraction;
+  return inDevPhase
+    ? { start: project.dev_start_date, end: project.dev_end_date }
+    : { start: project.support_start_date, end: project.support_end_date };
+}
+
 /** Whole days between two dates, floored at 0 (never negative). */
 export function daysBetween(start: string, end: string): number {
   const startMs = new Date(start).getTime();
@@ -84,23 +111,20 @@ export function daysBetween(start: string, end: string): number {
   return Math.max(0, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 }
 
-/** % of tracked work items — milestones and pending tasks pooled together —
- * that are complete, or null when there are none yet (a distinct state from
- * 0%, per the PRD: 0% implies items exist and none are done, which isn't the
- * same statement as "none tracked"). Pooling the two makes the metric
- * task-level: a milestone with no pending tasks left against it still counts
- * once, and each pending task counts as its own unit, so completing or
- * adding a task shifts the percentage immediately on next read — there's no
- * separate cache to invalidate since the caller always passes live rows. */
+/** % of pending tasks marked done, or null when there are none yet (a
+ * distinct state from 0%, per the PRD: 0% implies tasks exist and none are
+ * done, which isn't the same statement as "none tracked"). Milestones are
+ * deliberately excluded — they're a coarser, phase-level label ("Phase 2 —
+ * Done") that a human sets directly, while this metric is meant to read as
+ * "how much of the tracked task backlog is left," which only the pending_tasks
+ * rows carry. There's no separate cache to invalidate since the caller always
+ * passes live rows. */
 export function computeMilestoneProgress(
-  milestones: { status: string }[],
   pendingTasks: { status: string }[]
 ): number | null {
-  const total = milestones.length + pendingTasks.length;
-  if (total === 0) return null;
-  const doneMilestones = milestones.filter((m) => m.status.toLowerCase() === "done").length;
+  if (pendingTasks.length === 0) return null;
   const doneTasks = pendingTasks.filter((t) => t.status.toLowerCase() === "done").length;
-  return Math.round(((doneMilestones + doneTasks) / total) * 100);
+  return Math.round((doneTasks / pendingTasks.length) * 100);
 }
 
 /** Bandwidth read against the allocation model: 1 lead project + 2 member

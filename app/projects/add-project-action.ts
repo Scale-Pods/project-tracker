@@ -117,6 +117,10 @@ export async function addProject(
     project: {
       ...project,
       assignees: insertedAssignees.map((a) => ({ id: a.id, name: a.name })),
+      // New projects always start in "Onboarding" (see the insert above),
+      // which is always dev-phase, so the dev window applies unconditionally
+      // — no need to look up project_stages here.
+      timelineWindow: { start: project.dev_start_date, end: project.dev_end_date },
     },
   };
 }

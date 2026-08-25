@@ -5,6 +5,7 @@ import {
   computeSaturdayOff,
   filterCompletedThisWeek,
   filterOpenAsOfFriday,
+  resolveTimelineWindow,
   toDateKey,
 } from "@/lib/format";
 import type {
@@ -15,6 +16,22 @@ import type {
   TeamMemberWorkload,
   WorkloadProjectRef,
 } from "@/lib/types";
+
+// The Development-stage completion_fraction is the boundary between the dev
+// window and the support window for resolveTimelineWindow (lib/format.ts) —
+// same boundary recompute-delay.ts uses for the delay/status computation.
+// Falls back to 1 (every stage resolves to the dev window) if the stage has
+// been renamed away, rather than guessing at a replacement fraction.
+async function getStageFractions(
+  supabase: ReturnType<typeof createServiceRoleClient>
+): Promise<{ fractionByStage: Map<string, number>; devBoundaryFraction: number }> {
+  const { data, error } = await supabase.from("project_stages").select("name, completion_fraction");
+  if (error) throw new Error(error.message);
+
+  const fractionByStage = new Map((data ?? []).map((s) => [s.name, Number(s.completion_fraction)]));
+  const devBoundaryFraction = fractionByStage.get("Development") ?? 1;
+  return { fractionByStage, devBoundaryFraction };
+}
 
 export async function getProjectsWithAssignees(): Promise<ProjectWithAssignees[]> {
   const supabase = createServiceRoleClient();
@@ -30,28 +47,38 @@ export async function getProjectsWithAssignees(): Promise<ProjectWithAssignees[]
 
   if (!projects || projects.length === 0) return [];
 
-  const { data: assignees, error: assigneesError } = await supabase
-    .from("project_assignees")
-    .select("id, project_id, name")
-    .in(
-      "project_id",
-      projects.map((p) => p.id)
-    );
+  const [assigneesRes, stageFractions] = await Promise.all([
+    supabase
+      .from("project_assignees")
+      .select("id, project_id, name")
+      .in(
+        "project_id",
+        projects.map((p) => p.id)
+      ),
+    getStageFractions(supabase),
+  ]);
 
-  if (assigneesError) {
-    throw new Error(assigneesError.message);
+  if (assigneesRes.error) {
+    throw new Error(assigneesRes.error.message);
   }
 
   const assigneesByProject = new Map<string, { id: string; name: string }[]>();
-  for (const a of assignees ?? []) {
+  for (const a of assigneesRes.data ?? []) {
     const list = assigneesByProject.get(a.project_id) ?? [];
     list.push({ id: a.id, name: a.name });
     assigneesByProject.set(a.project_id, list);
   }
 
+  const { fractionByStage, devBoundaryFraction } = stageFractions;
+
   return projects.map((p) => ({
     ...p,
     assignees: assigneesByProject.get(p.id) ?? [],
+    timelineWindow: resolveTimelineWindow(
+      p,
+      fractionByStage.get(p.stage) ?? devBoundaryFraction,
+      devBoundaryFraction
+    ),
   }));
 }
 
@@ -207,7 +234,7 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail | null
 
   if (!project) return null;
 
-  const [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes] = await Promise.all([
+  const [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes, stageFractions] = await Promise.all([
     supabase.from("project_assignees").select("*").eq("project_id", id).order("added_at"),
     supabase
       .from("blockers")
@@ -225,11 +252,14 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail | null
       .select("*")
       .eq("project_id", id)
       .order("created_at", { ascending: false }),
+    getStageFractions(supabase),
   ]);
 
   for (const res of [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes]) {
     if (res.error) throw new Error(res.error.message);
   }
+
+  const { fractionByStage, devBoundaryFraction } = stageFractions;
 
   return {
     project,
@@ -238,5 +268,10 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail | null
     pendingTasks: tasksRes.data ?? [],
     milestones: milestonesRes.data ?? [],
     remarks: remarksRes.data ?? [],
+    timelineWindow: resolveTimelineWindow(
+      project,
+      fractionByStage.get(project.stage) ?? devBoundaryFraction,
+      devBoundaryFraction
+    ),
   };
 }

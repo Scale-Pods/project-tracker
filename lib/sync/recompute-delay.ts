@@ -1,17 +1,39 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
 
-// Ports prompt.md Section 7 exactly, against the columns actually present on
-// the live projects table: dev_start_date, dev_end_date, dev_delay_days
+// Ports prompt.md Section 7, against the columns actually present on the
+// live projects table: dev_start_date, dev_end_date, dev_delay_days
 // (prompt.md's prose says start_date/planned_end_date/delay_days, but the
 // schema was renamed in a prior migration — see the plan file's Context
-// section). Only ever runs on projects with actual_end_date IS NULL;
-// projects_closure_status_chk would reject a status write on a closed
-// project anyway, but this filters them out before ever trying.
+// section).
+//
+// Deviation from prompt.md: the projects table now carries two windows —
+// dev_start_date/dev_end_date and support_start_date/support_end_date (see
+// migration "Split project timeline into Development and Testing/Support
+// phases") — and project_stages still ranks stages all the way through
+// Testing/UAT/Client Review/Completed. A prior simplification measured every
+// stage's completion_fraction against the dev window alone, which meant a
+// project sitting in "Development" (0.55) for the entire dev window always
+// read as increasingly delayed near dev_end_date, even though "Development"
+// is the dev window's actual finish line — Testing onward is meant to land
+// in the support window. Fixed by picking whichever window the current
+// stage actually belongs to and rescaling completion_fraction to a 0-1
+// progress ratio *within that window*, using the Development-stage fraction
+// as the boundary between the two:
+//   - stage fraction <= boundary  -> dev window; ratio = fraction / boundary
+//   - stage fraction >  boundary  -> support window; ratio = (fraction - boundary) / (1 - boundary)
+// so reaching "Development" at any point during the dev window is exactly
+// on pace (ratio 1), and reaching "Completed" at any point during the
+// support window is exactly on pace (ratio 1) too. Only ever runs on
+// projects with actual_end_date IS NULL; projects_closure_status_chk would
+// reject a status write on a closed project anyway, but this filters them
+// out before ever trying.
 type ProjectForDelay = {
   id: string;
   dev_start_date: string;
   dev_end_date: string;
+  support_start_date: string;
+  support_end_date: string;
   stage: string;
   status: string;
   dev_delay_days: number;
@@ -26,11 +48,25 @@ function daysBetween(a: Date, b: Date): number {
 function computeForProject(
   project: ProjectForDelay,
   completionFraction: number,
+  devBoundaryFraction: number,
   hasStaleClientBlocker: boolean,
   today: Date
 ): { status: string; delay_days: number } {
-  const start = new Date(project.dev_start_date);
-  const plannedEnd = new Date(project.dev_end_date);
+  const inDevPhase = completionFraction <= devBoundaryFraction;
+
+  const start = new Date(inDevPhase ? project.dev_start_date : project.support_start_date);
+  const plannedEnd = new Date(inDevPhase ? project.dev_end_date : project.support_end_date);
+
+  // Progress ratio within whichever window applies: 0 at the start of the
+  // phase, 1 once the phase's finish-line stage is reached.
+  const phaseProgress = inDevPhase
+    ? devBoundaryFraction > 0
+      ? completionFraction / devBoundaryFraction
+      : 1
+    : devBoundaryFraction < 1
+      ? (completionFraction - devBoundaryFraction) / (1 - devBoundaryFraction)
+      : 1;
+  const progressRatio = Math.min(1, Math.max(0, phaseProgress));
 
   // Step 1 — overdue check, factual, always applies.
   if (today > plannedEnd) {
@@ -44,10 +80,10 @@ function computeForProject(
 
   let result: { status: string; delay_days: number };
 
-  if (completionFraction >= elapsedFraction) {
+  if (progressRatio >= elapsedFraction) {
     result = { status: "On Track", delay_days: 0 };
   } else {
-    const projectedTotalDays = completionFraction > 0 ? elapsedDays / completionFraction : totalPlannedDays;
+    const projectedTotalDays = progressRatio > 0 ? elapsedDays / progressRatio : totalPlannedDays;
     const projectedEnd = new Date(start.getTime() + projectedTotalDays * MS_PER_DAY);
     const delayDays = Math.max(0, daysBetween(plannedEnd, projectedEnd));
     const threshold = Math.max(3, 0.1 * totalPlannedDays);
@@ -72,7 +108,9 @@ async function recompute(projectIds: string[] | null): Promise<void> {
 
   let projectsQuery = supabase
     .from("projects")
-    .select("id, dev_start_date, dev_end_date, stage, status, dev_delay_days")
+    .select(
+      "id, dev_start_date, dev_end_date, support_start_date, support_end_date, stage, status, dev_delay_days"
+    )
     .is("actual_end_date", null);
 
   if (projectIds) {
@@ -95,6 +133,13 @@ async function recompute(projectIds: string[] | null): Promise<void> {
 
   const fractionByStage = new Map((stagesRes.data ?? []).map((s) => [s.name, Number(s.completion_fraction)]));
 
+  // The Development-stage fraction is the boundary between the dev window
+  // and the support window (see comment above computeForProject). If the
+  // stage has been renamed away, fall back to 1 so every stage resolves to
+  // the dev window — i.e. the pre-fix, single-window behaviour — rather
+  // than guessing at a replacement fraction.
+  const devBoundaryFraction = fractionByStage.get("Development") ?? 1;
+
   const staleClientBlockerProjects = new Set(
     (blockersRes.data ?? [])
       .filter((b) => daysBetween(new Date(b.first_seen_date), today) > 5)
@@ -113,6 +158,7 @@ async function recompute(projectIds: string[] | null): Promise<void> {
     const computed = computeForProject(
       project,
       fraction,
+      devBoundaryFraction,
       staleClientBlockerProjects.has(project.id),
       today
     );

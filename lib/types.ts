@@ -156,9 +156,16 @@ export type SyncRun = {
   finished_at: string | null;
 };
 
+// The dev-or-support window "Timeline progress" should measure against for
+// this project right now — resolved server-side (lib/format.ts, resolveTimelineWindow)
+// since it depends on project_stages, which the list/detail queries fetch once
+// and components don't otherwise have access to.
+export type TimelineWindow = { start: string; end: string };
+
 // A project row plus the lightweight assignee-name join used on the list page.
 export type ProjectWithAssignees = Project & {
   assignees: Pick<ProjectAssignee, "id" | "name">[];
+  timelineWindow: TimelineWindow;
 };
 
 // Team bandwidth model: each person is meant to be payout_role "Owner" (lead)
@@ -197,6 +204,7 @@ export type ProjectDetail = {
   pendingTasks: PendingTask[];
   milestones: Milestone[];
   remarks: RemarksLogEntry[];
+  timelineWindow: TimelineWindow;
 };
 
 export type Database = {

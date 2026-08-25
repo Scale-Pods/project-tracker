@@ -18,8 +18,8 @@ export function ProjectCard({
   style?: React.CSSProperties;
 }) {
   const progress = computeTimelineProgress(
-    project.dev_start_date,
-    project.dev_end_date,
+    project.timelineWindow.start,
+    project.timelineWindow.end,
     project.actual_end_date
   );
   const visibleAssignees = project.assignees.slice(0, 3);
@@ -74,7 +74,7 @@ export function ProjectCard({
 
         <div className="mt-5 space-y-1.5">
           <div className="flex items-center justify-between text-xs text-text-secondary">
-            <span>{formatDateRange(project.dev_start_date, project.dev_end_date)}</span>
+            <span>{formatDateRange(project.timelineWindow.start, project.timelineWindow.end)}</span>
             <span className="font-medium tabular-nums text-text-primary">
               {isClosed ? "Closed" : `${progress}%`}
             </span>

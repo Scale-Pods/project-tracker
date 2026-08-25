@@ -50,7 +50,7 @@ export default async function ProjectDetailPage({
 
   if (!detail) notFound();
 
-  const { project, assignees, blockers, pendingTasks, milestones, remarks } = detail;
+  const { project, assignees, blockers, pendingTasks, milestones, remarks, timelineWindow } = detail;
 
   const hasUnverified =
     project.unverified ||
@@ -78,7 +78,12 @@ export default async function ProjectDetailPage({
               remarks={remarks}
             />
           </Suspense>
-          <ProgressOverview project={project} milestones={milestones} pendingTasks={pendingTasks} />
+          <ProgressOverview
+            project={project}
+            milestones={milestones}
+            pendingTasks={pendingTasks}
+            timelineWindow={timelineWindow}
+          />
           <TeamSection assignees={assignees} />
           <BlockersSection blockers={blockers} />
           <PendingTasksSection tasks={pendingTasks} />
