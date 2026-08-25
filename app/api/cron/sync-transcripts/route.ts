@@ -5,7 +5,12 @@ import { processTranscript } from "@/lib/sync/process-transcript";
 import { recomputeDelayPortfolioWide } from "@/lib/sync/recompute-delay";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Processing several transcripts sequentially (each a Claude call) can
+// comfortably exceed 300s, especially for a long meeting — raised to the
+// Vercel Pro/Fluid compute ceiling. The route is idempotent per transcript
+// (processed_transcripts + the RPC's own guards), so even if a run is still
+// cut off, re-triggering safely picks up wherever it left off.
+export const maxDuration = 800;
 
 // The reconciliation pass always looks at just the most recent N occurrences
 // of one recurring meeting, not a date window or an account-wide listing —
