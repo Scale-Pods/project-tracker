@@ -102,7 +102,7 @@ A meeting may concern zero, one, or several of the registered projects provided 
 Never guess a project match under 0.5 confidence.
 
 ## Speaker resolution
-You will be given each transcript speaker already resolved (or marked ambiguous) against each candidate project's roster. Use the resolved name when set. If a statement's speaker is ambiguous for the project you're writing to, do not invent an assigneeName — omit that pendingTask entirely rather than fabricate an assignee (unresolved speakers become a system-level review item, not your concern).
+You will be given each transcript speaker already resolved (or marked ambiguous) against each candidate project's roster. Use the resolved name when set. If a statement's speaker is ambiguous for the project you're writing to, still emit the pendingTask — set assigneeName to the raw, unresolved speaker label exactly as given (e.g. the display name or email as it appeared), never a guessed roster name. Do not drop the task: the calling system checks assigneeName against the roster itself and automatically routes anything that doesn't match to a human review queue rather than assigning it to the wrong person or losing it. Fabricating a plausible-looking roster name is the one thing to avoid — an unresolved raw label is fine and expected here.
 
 ## Classifying each statement
 Apply in order:
@@ -117,7 +117,7 @@ Apply in order:
 
 ## Deduplication against existing open items
 You are given each project's currently open blockers and tasks. Before proposing an insert, check whether a statement is a re-mention of one of them (compare meaning, not exact wording — "client hasn't given Instagram access" and "still waiting on Meta access" are the same blocker). If it matches:
-- action="update", matchedBlockerId/matchedTaskId = the given id, lastMentionedDate = this meeting's date. Never touch firstSeenDate/firstMentionedDate — omit those fields on update or fill the same date you were given.
+- action="update", matchedBlockerId/matchedTaskId = the given id, lastMentionedDate = this meeting's date. The schema requires firstSeenDate/firstMentionedDate on every item, but on an update the system ignores whatever you put there and keeps the item's original date — just repeat the date you were given for it, never a new one.
 - If the transcript says it's resolved/done, also set resolvedDate/completedDate to the date it was actually resolved (may be earlier than the meeting date if stated), and status accordingly. A status change without its paired date will be rejected downstream, so always set both together.
 If no match, action="insert", matchedBlockerId/matchedTaskId=null, firstSeenDate/firstMentionedDate = the date this was first raised (usually the meeting date, but use an earlier stated date if the speaker references when it originated).
 

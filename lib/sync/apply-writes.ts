@@ -18,7 +18,7 @@ type SegmentWrites = {
   milestones: Record<string, unknown>[];
   remarks: Record<string, unknown>[];
   pending_review_queue: QueueItem[];
-  stage_change: { new_stage: string; confidence: number } | null;
+  stage_change: { new_stage: string; confidence: number; unverified: boolean } | null;
   awaiting_closure: boolean;
 };
 
@@ -134,7 +134,22 @@ function buildSegmentWrites(
   }
 
   for (const m of segment.milestones) {
-    if (m.confidence < REVIEW_THRESHOLD) continue; // no natural queue destination for a checkpoint name; drop
+    if (m.confidence < 0 || m.confidence > 1) continue;
+
+    if (m.confidence < REVIEW_THRESHOLD) {
+      // Rule 4 applies to every extracted item, not just blockers/tasks —
+      // never write below 0.5 confidence, route to pending_review_queue
+      // instead. milestones has no unverified column, so 0.5-0.8 still
+      // writes live below with no marking (the schema can't represent it);
+      // only the <0.5 floor needs a queue destination.
+      writes.pending_review_queue.push({
+        field_name: "milestones",
+        proposed_value: `${m.name}: ${m.status}`,
+        confidence: m.confidence,
+      });
+      continue;
+    }
+
     writes.milestones.push({ name: m.name, status: m.status });
   }
 
@@ -156,17 +171,23 @@ function buildSegmentWrites(
 
   if (segment.stageChange) {
     const validStage = context.stages.some((s) => s.name === segment.stageChange!.newStage);
-    if (validStage && segment.stageChange.confidence >= LIVE_THRESHOLD) {
+    const tier = confidenceTier(segment.stageChange.confidence);
+
+    if (validStage && tier !== "review") {
+      // Same confidence-routing table as every other write type (Section
+      // 6.5) — a stage change isn't a special case. 0.5-0.8 still lands
+      // live, but flags projects.unverified so a human knows this row's
+      // stage came from a medium-confidence extraction.
       writes.stage_change = {
         new_stage: segment.stageChange.newStage,
         confidence: segment.stageChange.confidence,
+        unverified: tier === "unverified",
       };
     } else {
-      // Unmapped stage or insufficient evidence: record as a remark instead
-      // of forcing an invalid/uncertain value (prompt.md Section 6.4 /
-      // Example 4). The remark itself still goes through the tier check
-      // above if the caller included one; this just prevents the stage
-      // write.
+      // Unmapped stage (prompt.md Section 6.4 / Example 4) or <0.5
+      // confidence: never force it. Claude separately records the
+      // observation as a remark per the ruleset; this just keeps the
+      // uncertain/invalid stage value out of the live column.
       writes.pending_review_queue.push({
         field_name: "projects.stage",
         proposed_value: segment.stageChange.newStage,
@@ -176,6 +197,23 @@ function buildSegmentWrites(
   }
 
   return writes;
+}
+
+// Same 0.5 floor as every other confidence-routing decision (rule 5:
+// "never guess a project match"). This is enforced here in code rather
+// than trusted from Claude's own noConfidentMatch/unmatchedSnippet
+// self-gating — a segment can carry a non-null projectId with a
+// low-confidence match if the model didn't follow its own instructions,
+// and this is the backstop that catches it.
+const MIN_PROJECT_MATCH_CONFIDENCE = 0.5;
+
+function buildSegmentSnippet(segment: ExtractionSegment): string {
+  const parts = [
+    ...segment.blockers.map((b) => b.description),
+    ...segment.pendingTasks.map((t) => t.description),
+    ...segment.remarks.map((r) => r.summary),
+  ];
+  return parts.join(" | ").slice(0, 500) || "Low-confidence project match with no other captured content.";
 }
 
 export type ApplyOutcome =
@@ -208,14 +246,23 @@ export async function applyExtractionResult(
   }
 
   const matchedSegments = result.segments.filter(
-    (s): s is ExtractionSegment & { projectId: string } => s.projectId !== null
+    (s): s is ExtractionSegment & { projectId: string } =>
+      s.projectId !== null && s.projectMatchConfidence >= MIN_PROJECT_MATCH_CONFIDENCE
   );
-  const unmatchedSegments = result.segments.filter((s) => s.projectId === null && s.unmatchedSnippet);
+
+  const explicitUnmatched = result.segments.filter((s) => s.projectId === null && s.unmatchedSnippet);
+  const lowConfidenceMatches = result.segments.filter(
+    (s) => s.projectId !== null && s.projectMatchConfidence < MIN_PROJECT_MATCH_CONFIDENCE
+  );
+  const unmatchedSnippets = [
+    ...explicitUnmatched.map((s) => s.unmatchedSnippet!),
+    ...lowConfidenceMatches.map(buildSegmentSnippet),
+  ];
 
   for (let i = 0; i < matchedSegments.length; i++) {
     const segment = matchedSegments[i];
     const writes = buildSegmentWrites(segment, context);
-    const isLastSegment = unmatchedSegments.length === 0 && i === matchedSegments.length - 1;
+    const isLastSegment = unmatchedSnippets.length === 0 && i === matchedSegments.length - 1;
 
     const { error } = await supabase.rpc("apply_transcript_segment", {
       p_project_id: segment.projectId,
@@ -229,8 +276,8 @@ export async function applyExtractionResult(
     if (error) throw new Error(`apply_transcript_segment failed for project ${segment.projectId}: ${error.message}`);
   }
 
-  if (unmatchedSegments.length > 0) {
-    const residue = unmatchedSegments.map((s) => s.unmatchedSnippet).join("\n---\n").slice(0, 500);
+  if (unmatchedSnippets.length > 0) {
+    const residue = unmatchedSnippets.join("\n---\n").slice(0, 500);
     const { error } = await supabase.rpc("log_unmatched_meeting", {
       p_transcript_id: meta.transcriptId,
       p_meeting_date: meta.meetingDate,
@@ -241,7 +288,7 @@ export async function applyExtractionResult(
     if (error) throw new Error(`log_unmatched_meeting (residue) failed: ${error.message}`);
   }
 
-  if (matchedSegments.length === 0 && unmatchedSegments.length === 0) {
+  if (matchedSegments.length === 0 && unmatchedSnippets.length === 0) {
     // Extraction returned no segments at all without flagging either scope
     // gate — treat conservatively as unmatched so the transcript still gets
     // recorded and a human can inspect it, rather than silently dropping it.
