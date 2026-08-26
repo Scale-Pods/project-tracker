@@ -28,6 +28,56 @@ function confidenceTier(confidence: number): "live" | "unverified" | "review" {
   return "review";
 }
 
+// Backstop for the "Catchup Tech Team | ScalePods" roll-call format: 8
+// people each give updates project-by-project, so the same project is
+// routinely discussed by multiple different speakers at non-adjacent points
+// in the transcript. The RULESET instructs Claude to merge all mentions of
+// one project into a single segment, but that's a prompt instruction, not a
+// schema guarantee — nothing stops the model from emitting two segments
+// with the same projectId if it treats two speakers' updates as separate.
+// Without this, two segments for the same project would each independently
+// call apply_transcript_segment against the *same* pre-fetched open
+// blockers/tasks snapshot (fetchSyncContext runs once, before any writes),
+// so a blocker or task two speakers both mentioned could be inserted twice.
+// Merging here — same defensive posture as MIN_PROJECT_MATCH_CONFIDENCE
+// below, which backstops Claude's project-matching in code rather than
+// trusting it — makes exactly one write per project regardless of how many
+// segments the model produced for it.
+function mergeSegmentsByProject(
+  segments: (ExtractionSegment & { projectId: string })[]
+): (ExtractionSegment & { projectId: string })[] {
+  const byProject = new Map<string, ExtractionSegment & { projectId: string }>();
+
+  for (const segment of segments) {
+    const existing = byProject.get(segment.projectId);
+    if (!existing) {
+      byProject.set(segment.projectId, { ...segment });
+      continue;
+    }
+
+    existing.blockers = [...existing.blockers, ...segment.blockers];
+    existing.pendingTasks = [...existing.pendingTasks, ...segment.pendingTasks];
+    existing.milestones = [...existing.milestones, ...segment.milestones];
+    existing.remarks = [...existing.remarks, ...segment.remarks];
+    existing.awaitingClosure = existing.awaitingClosure || segment.awaitingClosure;
+    existing.projectMatchConfidence = Math.max(
+      existing.projectMatchConfidence,
+      segment.projectMatchConfidence
+    );
+    // Later-discussed segment's stage change wins when both are present —
+    // segments are emitted in transcript order, so this favors whatever was
+    // said most recently about the project's phase, same as how a single
+    // segment's own last-mentioned-date logic already prefers newer signal.
+    // A confident stage change is also never dropped in favor of a merely
+    // higher-confidence-but-earlier one being null.
+    if (segment.stageChange) {
+      existing.stageChange = segment.stageChange;
+    }
+  }
+
+  return Array.from(byProject.values());
+}
+
 function buildSegmentWrites(
   segment: ExtractionSegment,
   context: SyncContext
@@ -245,9 +295,11 @@ export async function applyExtractionResult(
     return { status: "no_confident_match" };
   }
 
-  const matchedSegments = result.segments.filter(
-    (s): s is ExtractionSegment & { projectId: string } =>
-      s.projectId !== null && s.projectMatchConfidence >= MIN_PROJECT_MATCH_CONFIDENCE
+  const matchedSegments = mergeSegmentsByProject(
+    result.segments.filter(
+      (s): s is ExtractionSegment & { projectId: string } =>
+        s.projectId !== null && s.projectMatchConfidence >= MIN_PROJECT_MATCH_CONFIDENCE
+    )
   );
 
   const explicitUnmatched = result.segments.filter((s) => s.projectId === null && s.unmatchedSnippet);

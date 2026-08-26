@@ -96,6 +96,15 @@ A meeting may concern zero, one, or several of the registered projects provided 
 
 - Single-project call -> one segment for that project.
 - Multi-project stand-up -> segment by project, one segment per project actually discussed.
+  This meeting is a recurring team-wide roll-call: several team members speak in turn, and
+  each one gives updates on every project they personally work on. The same project is
+  routinely brought up by more than one speaker, at separate, non-adjacent points in the
+  transcript (e.g. Speaker 1 covers Project B early on, then Speaker 4 covers Project B again
+  much later). Treat "project discussed" as true for the whole transcript, not for one
+  contiguous span: scan the entire transcript for every mention of a given project from every
+  speaker who brings it up, and combine everything you find into that project's single
+  segment. Never emit two segments with the same projectId — if you find yourself about to
+  do that, merge them into one instead.
 - Partially matched -> segment(s) for matched projects, plus set noConfidentMatch=false but include an unmatchedSnippet on a segment with projectId=null for the unmatched residue.
 - No confident match anywhere (<0.5) -> set noConfidentMatch=true, segments=[].
 - Not a project meeting at all (sales call, all-hands, 1:1, interview) -> set notAProjectMeeting=true, segments=[].
