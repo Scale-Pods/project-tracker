@@ -8,6 +8,8 @@ import {
   resolveTimelineWindow,
   toDateKey,
 } from "@/lib/format";
+import { computeCurrentProgress, fetchProjectMeetingDates } from "@/lib/progress/current";
+import { isQuietlySettled } from "@/lib/staleness";
 import type {
   BandwidthStatus,
   MemberSaturdayOff,
@@ -47,19 +49,23 @@ export async function getProjectsWithAssignees(): Promise<ProjectWithAssignees[]
 
   if (!projects || projects.length === 0) return [];
 
-  const [assigneesRes, stageFractions] = await Promise.all([
+  const projectIds = projects.map((p) => p.id);
+
+  const [assigneesRes, snapshotsRes, stageFractions] = await Promise.all([
+    supabase.from("project_assignees").select("id, project_id, name").in("project_id", projectIds),
     supabase
-      .from("project_assignees")
-      .select("id, project_id, name")
-      .in(
-        "project_id",
-        projects.map((p) => p.id)
-      ),
+      .from("progress_snapshots")
+      .select("project_id, dpi, low_signal, as_of_date")
+      .in("project_id", projectIds)
+      .order("as_of_date", { ascending: false }),
     getStageFractions(supabase),
   ]);
 
   if (assigneesRes.error) {
     throw new Error(assigneesRes.error.message);
+  }
+  if (snapshotsRes.error) {
+    throw new Error(snapshotsRes.error.message);
   }
 
   const assigneesByProject = new Map<string, { id: string; name: string }[]>();
@@ -69,11 +75,19 @@ export async function getProjectsWithAssignees(): Promise<ProjectWithAssignees[]
     assigneesByProject.set(a.project_id, list);
   }
 
+  // Rows come newest-first, so the first seen per project is the latest.
+  const latestDpiByProject = new Map<string, number | null>();
+  for (const s of snapshotsRes.data ?? []) {
+    if (latestDpiByProject.has(s.project_id)) continue;
+    latestDpiByProject.set(s.project_id, s.low_signal ? null : Number(s.dpi));
+  }
+
   const { fractionByStage, devBoundaryFraction } = stageFractions;
 
   return projects.map((p) => ({
     ...p,
     assignees: assigneesByProject.get(p.id) ?? [],
+    developmentProgress: latestDpiByProject.get(p.id) ?? null,
     timelineWindow: resolveTimelineWindow(
       p,
       fractionByStage.get(p.stage) ?? devBoundaryFraction,
@@ -234,44 +248,91 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail | null
 
   if (!project) return null;
 
-  const [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes, stageFractions] = await Promise.all([
-    supabase.from("project_assignees").select("*").eq("project_id", id).order("added_at"),
-    supabase
-      .from("blockers")
-      .select("*")
-      .eq("project_id", id)
-      .order("last_mentioned_date", { ascending: false }),
-    supabase
-      .from("pending_tasks")
-      .select("*")
-      .eq("project_id", id)
-      .order("last_mentioned_date", { ascending: false }),
-    supabase.from("milestones").select("*").eq("project_id", id).order("updated_at"),
-    supabase
-      .from("remarks_log")
-      .select("*")
-      .eq("project_id", id)
-      .order("created_at", { ascending: false }),
-    getStageFractions(supabase),
-  ]);
+  const [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes, snapshotsRes, stageFractions] =
+    await Promise.all([
+      supabase.from("project_assignees").select("*").eq("project_id", id).order("added_at"),
+      supabase
+        .from("blockers")
+        .select("*")
+        .eq("project_id", id)
+        .order("last_mentioned_date", { ascending: false }),
+      supabase
+        .from("pending_tasks")
+        .select("*")
+        .eq("project_id", id)
+        .order("last_mentioned_date", { ascending: false }),
+      supabase.from("milestones").select("*").eq("project_id", id).order("updated_at"),
+      supabase
+        .from("remarks_log")
+        .select("*")
+        .eq("project_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("progress_snapshots")
+        .select("*")
+        .eq("project_id", id)
+        .order("as_of_date", { ascending: true }),
+      getStageFractions(supabase),
+    ]);
 
-  for (const res of [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes]) {
+  for (const res of [assigneesRes, blockersRes, tasksRes, milestonesRes, remarksRes, snapshotsRes]) {
     if (res.error) throw new Error(res.error.message);
   }
 
   const { fractionByStage, devBoundaryFraction } = stageFractions;
+  const allBlockers = blockersRes.data ?? [];
+  const allTasks = tasksRes.data ?? [];
+  const allRemarks = remarksRes.data ?? [];
+  const milestones = milestonesRes.data ?? [];
+
+  const meetingDates = await fetchProjectMeetingDates(id);
+
+  // DPI runs on the FULL history — its own stale logic scores untouched tasks as
+  // resolved, so the number and the (filtered) list below stay in agreement.
+  const currentProgress = await computeCurrentProgress({
+    projectId: id,
+    stage: project.stage,
+    fractionByStage,
+    devBoundaryFraction,
+    milestones,
+    tasks: allTasks,
+    blockers: allBlockers,
+    meetingDates,
+  });
+
+  // Quietly drop open items and old activity that has gone undiscussed for
+  // QUIET_SETTLE_DAYS while the project kept meeting — presumed done/resolved
+  // or no longer current. Explicitly done/resolved items, and the onboarding
+  // note, are never hidden this way. The page shows no trace of the omission.
+  const nowKey = toDateKey(new Date());
+  const settled = (lastMentioned: string) =>
+    isQuietlySettled(lastMentioned, meetingDates, nowKey);
+
+  const blockers = allBlockers.filter(
+    (b) => b.status.toLowerCase() === "resolved" || !settled(b.last_mentioned_date)
+  );
+  const pendingTasks = allTasks.filter(
+    (t) => t.status.toLowerCase() === "done" || !settled(t.last_mentioned_date)
+  );
+  const remarks = allRemarks.filter(
+    (r) => r.source === "manual_onboarding" || !settled(toDateKey(new Date(r.created_at)))
+  );
 
   return {
     project,
     assignees: assigneesRes.data ?? [],
-    blockers: blockersRes.data ?? [],
-    pendingTasks: tasksRes.data ?? [],
-    milestones: milestonesRes.data ?? [],
-    remarks: remarksRes.data ?? [],
+    blockers,
+    pendingTasks,
+    milestones,
+    remarks,
     timelineWindow: resolveTimelineWindow(
       project,
       fractionByStage.get(project.stage) ?? devBoundaryFraction,
       devBoundaryFraction
     ),
+    progress: {
+      current: currentProgress,
+      series: snapshotsRes.data ?? [],
+    },
   };
 }

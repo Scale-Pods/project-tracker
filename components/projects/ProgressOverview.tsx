@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { computeMilestoneProgress, computeTimelineProgress, formatDate } from "@/lib/format";
-import type { Milestone, PendingTask, Project, TimelineWindow } from "@/lib/types";
+import { TrendChart } from "@/components/ui/TrendChart";
+import { computeTimelineProgress, formatDate } from "@/lib/format";
+import { expectedPaceAt, type DpiResult } from "@/lib/progress/compute";
+import type { Milestone, Project, ProgressSnapshot, TimelineWindow } from "@/lib/types";
 
 const HEALTH_STYLES: Record<
   "good" | "warn" | "bad",
@@ -46,15 +48,19 @@ const MILESTONE_STATUS_TONE: Record<string, "good" | "warn" | "neutral"> = {
   done: "good",
 };
 
+function pct(n: number | null): string {
+  return n === null ? "—" : `${Math.round(n * 100)}%`;
+}
+
 export function ProgressOverview({
   project,
   milestones,
-  pendingTasks,
+  progress,
   timelineWindow,
 }: {
   project: Project;
   milestones: Milestone[];
-  pendingTasks: PendingTask[];
+  progress: { current: DpiResult; series: ProgressSnapshot[] };
   timelineWindow: TimelineWindow;
 }) {
   const timelineProgress = computeTimelineProgress(
@@ -63,20 +69,36 @@ export function ProgressOverview({
     project.actual_end_date
   );
   const isClosed = Boolean(project.actual_end_date);
-  const milestoneProgress = computeMilestoneProgress(pendingTasks);
   const health = HEALTH_STYLES[STATUS_TONE[project.status] ?? "good"];
+
+  const { current } = progress;
+  const dpi = current.dpi;
+  // Tone the bar by how the score sits against the planned pace.
+  const devProgressTone: "good" | "warn" | "bad" =
+    dpi >= timelineProgress - 5 ? "good" : dpi >= timelineProgress - 15 ? "warn" : "bad";
+
+  // Low-signal points would plot as a flat stage-only line — drop them so the
+  // curve only shows dates the score is actually meaningful for.
+  const chartPoints = progress.series
+    .filter((s) => !s.low_signal)
+    .map((s) => ({
+      date: s.as_of_date,
+      dpi: Number(s.dpi),
+      expected: expectedPaceAt(project.dev_start_date, project.dev_end_date, s.as_of_date),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return (
     <section id="progress" className="scroll-mt-24">
       <SectionHeading eyebrow="Progress" title="How this project is tracking" />
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.6fr]">
+      <div className="grid items-start gap-5 lg:grid-cols-[1fr_1.6fr]">
         <div
-          className={`flex flex-col justify-between rounded-2xl border p-6 backdrop-blur-2xl ${health.border} ${health.bg} ${health.glow}`}
+          className={`flex flex-col gap-3 self-start rounded-2xl border p-5 backdrop-blur-2xl ${health.border} ${health.bg} ${health.glow}`}
         >
           <div>
             <p className="text-[11px] tracking-[0.08em] text-text-secondary uppercase">Health</p>
-            <p className={`mt-2 flex items-center gap-2 text-2xl font-bold ${health.text}`}>
+            <p className={`mt-1.5 flex items-center gap-2 text-2xl font-bold ${health.text}`}>
               <span
                 className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_2px_currentColor]"
                 style={{ backgroundColor: "currentColor" }}
@@ -85,7 +107,7 @@ export function ProgressOverview({
               {project.status}
             </p>
           </div>
-          <p className="mt-6 text-xs text-text-secondary">
+          <p className="text-xs text-text-secondary">
             {project.dev_delay_days > 0
               ? `${project.dev_delay_days} day${project.dev_delay_days === 1 ? "" : "s"} behind plan.`
               : "Computed daily by the automation pipeline, independent of meetings."}
@@ -111,16 +133,37 @@ export function ProgressOverview({
 
           <div>
             <div className="flex items-center justify-between text-xs text-text-secondary">
-              <span>Milestone progress</span>
-              {milestoneProgress !== null && (
-                <span className="font-medium tabular-nums text-text-primary">{milestoneProgress}%</span>
+              <span>Development progress</span>
+              {!current.lowSignal && (
+                <span className="font-medium tabular-nums text-text-primary">{dpi}%</span>
               )}
             </div>
-            {milestoneProgress === null ? (
-              <p className="mt-2 text-sm text-text-secondary">No milestones or tasks tracked yet</p>
+
+            {current.lowSignal ? (
+              <p className="mt-2 text-sm text-text-secondary">
+                Tracking from lifecycle stage only — not enough meeting activity yet.
+              </p>
             ) : (
-              <div className="mt-2">
-                <ProgressBar value={milestoneProgress} tone="good" label="Milestone progress" />
+              <>
+                <div className="mt-2">
+                  <ProgressBar value={dpi} tone={devProgressTone} label="Development progress" />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-secondary">
+                  <span>Stage {pct(current.breakdown.stageScore)}</span>
+                  <span>Milestones {pct(current.breakdown.milestoneScore)}</span>
+                  <span>Tasks {pct(current.breakdown.taskScore)}</span>
+                  {current.breakdown.blockerPenalty > 0 && (
+                    <span className="text-status-warn">
+                      −{Math.round(current.breakdown.blockerPenalty * 100)} blockers
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            {!current.lowSignal && chartPoints.length >= 2 && (
+              <div className="mt-4">
+                <TrendChart points={chartPoints} />
               </div>
             )}
           </div>

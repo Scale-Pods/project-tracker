@@ -99,6 +99,30 @@ export type ProjectStage = {
   is_terminal: boolean;
 };
 
+// One captured point on a project's Development Progress Index (DPI) curve.
+// Written by lib/progress/snapshot.ts after each processed Fireflies meeting
+// (source_meeting_id set) and once daily by the cron sweep (source_meeting_id
+// null). Idempotent per (project_id, as_of_date) — a re-run updates the row.
+export type ProgressSnapshot = {
+  id: string;
+  project_id: string;
+  as_of_date: string;
+  source_meeting_id: string | null;
+  dpi: number;
+  stage_score: number;
+  milestone_score: number | null;
+  task_score: number | null;
+  blocker_penalty: number;
+  weights: { stage: number; milestone: number; task: number };
+  tasks_in_scope: number;
+  tasks_confirmed_done: number;
+  tasks_presumed_done: number;
+  milestones_total: number;
+  milestones_done: number;
+  low_signal: boolean;
+  created_at: string;
+};
+
 export type PendingReviewQueueEntry = {
   id: string;
   project_id: string;
@@ -166,6 +190,9 @@ export type TimelineWindow = { start: string; end: string };
 export type ProjectWithAssignees = Project & {
   assignees: Pick<ProjectAssignee, "id" | "name">[];
   timelineWindow: TimelineWindow;
+  // Latest persisted Development Progress Index; null when the project has no
+  // snapshot yet or is still in the low-signal state. See lib/progress/.
+  developmentProgress: number | null;
 };
 
 // Team bandwidth model: each person is meant to be payout_role "Owner" (lead)
@@ -205,6 +232,13 @@ export type ProjectDetail = {
   milestones: Milestone[];
   remarks: RemarksLogEntry[];
   timelineWindow: TimelineWindow;
+  // Development Progress Index: `current` recomputed live from the rows above
+  // (never lags the last snapshot), `series` the persisted history for the
+  // trend chart. See lib/progress/.
+  progress: {
+    current: import("@/lib/progress/compute").DpiResult;
+    series: ProgressSnapshot[];
+  };
 };
 
 export type Database = {
@@ -259,6 +293,21 @@ export type Database = {
         Row: Milestone;
         Insert: Partial<Milestone> & Pick<Milestone, "project_id" | "name" | "status">;
         Update: Partial<Milestone>;
+        Relationships: [];
+      };
+      progress_snapshots: {
+        Row: ProgressSnapshot;
+        Insert: Partial<ProgressSnapshot> &
+          Pick<
+            ProgressSnapshot,
+            | "project_id"
+            | "as_of_date"
+            | "dpi"
+            | "stage_score"
+            | "blocker_penalty"
+            | "weights"
+          >;
+        Update: Partial<ProgressSnapshot>;
         Relationships: [];
       };
       project_stages: {

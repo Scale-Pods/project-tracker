@@ -10,15 +10,26 @@ type SummaryInput = {
   pendingTasks: PendingTask[];
   milestones: Milestone[];
   remarks: RemarksLogEntry[];
+  developmentProgress: { dpi: number; lowSignal: boolean; trend: string };
 };
 
 export type SummaryResult = { ok: true; summary: string } | { ok: false; message: string };
 
-function buildSummaryPrompt({ project, blockers, pendingTasks, milestones, remarks }: SummaryInput): string {
+function buildSummaryPrompt({
+  project,
+  blockers,
+  pendingTasks,
+  milestones,
+  remarks,
+  developmentProgress,
+}: SummaryInput): string {
   const today = toDateKey(new Date());
   const openBlockers = blockers.filter((b) => b.status.toLowerCase() !== "resolved");
   const openTasks = pendingTasks.filter((t) => t.status.toLowerCase() !== "done");
   const doneMilestones = milestones.filter((m) => m.status.toLowerCase() === "done").length;
+  const progressLine = developmentProgress.lowSignal
+    ? "Development progress: not enough meeting activity to score yet"
+    : `Development progress: ${developmentProgress.dpi}% (${developmentProgress.trend})`;
 
   const blockerLines = openBlockers.length
     ? openBlockers
@@ -44,6 +55,7 @@ function buildSummaryPrompt({ project, blockers, pendingTasks, milestones, remar
 
 Project: ${project.project_name} (client: ${project.client_name})
 Status: ${project.status} | Stage: ${project.stage} | Delay: ${project.dev_delay_days} day(s)
+${progressLine}
 Milestones: ${doneMilestones}/${milestones.length} done
 
 Open blockers:

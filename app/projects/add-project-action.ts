@@ -121,6 +121,8 @@ export async function addProject(
       // which is always dev-phase, so the dev window applies unconditionally
       // — no need to look up project_stages here.
       timelineWindow: { start: project.dev_start_date, end: project.dev_end_date },
+      // No meetings processed yet, so no DPI snapshot exists.
+      developmentProgress: null,
     },
   };
 }

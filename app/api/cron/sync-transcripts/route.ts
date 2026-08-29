@@ -3,6 +3,7 @@ import { searchMeetings } from "@/lib/fireflies/client";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
 import { processTranscript } from "@/lib/sync/process-transcript";
 import { recomputeDelayPortfolioWide } from "@/lib/sync/recompute-delay";
+import { backfillAllSeries, writeSnapshotsPortfolioWide } from "@/lib/progress/snapshot";
 
 export const runtime = "nodejs";
 // Processing several transcripts sequentially (each a Claude call) can
@@ -39,6 +40,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // One-off: rebuild every project's DPI curve from audit_log + task history.
+  // Run once after first deploy (`?backfill=1`); safe to re-run (rows upsert).
+  if (request.nextUrl.searchParams.get("backfill") === "1") {
+    const backfilled = await backfillAllSeries();
+    return NextResponse.json({ backfilled });
+  }
+
   const supabase = createServiceRoleClient();
 
   const meetings = await searchMeetings(RECONCILE_MEETING_COUNT, RECONCILE_MEETING_TITLE);
@@ -73,6 +81,9 @@ export async function GET(request: NextRequest) {
   }
 
   await recomputeDelayPortfolioWide();
+  // Daily "today" DPI point for every active project, so the curve keeps
+  // moving even on days with no meeting (elapsed time vs. stalled progress).
+  await writeSnapshotsPortfolioWide();
 
   return NextResponse.json({
     checked: meetings.length,

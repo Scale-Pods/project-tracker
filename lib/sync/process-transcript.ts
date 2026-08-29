@@ -5,6 +5,7 @@ import { fetchSyncContext } from "@/lib/sync/fetch-sync-context";
 import { extractFromTranscript } from "@/lib/sync/sync-extraction";
 import { applyExtractionResult, buildRawSnippet, touchedProjectIds } from "@/lib/sync/apply-writes";
 import { recomputeDelayForProjects } from "@/lib/sync/recompute-delay";
+import { writeSnapshotForProject } from "@/lib/progress/snapshot";
 import type { SyncRunTrigger } from "@/lib/types";
 
 export type ProcessResult =
@@ -82,7 +83,14 @@ export async function processTranscript(
     });
 
     if (outcome.status === "success") {
-      await recomputeDelayForProjects(touchedProjectIds(result));
+      const touched = touchedProjectIds(result);
+      await recomputeDelayForProjects(touched);
+      // Capture a DPI point for each touched project, dated to this meeting.
+      // writeSnapshotForProject swallows its own errors — a snapshot failure
+      // must never turn a successful apply into a failure.
+      for (const pid of touched) {
+        await writeSnapshotForProject(pid, transcript.dateString, transcriptId);
+      }
     }
 
     await supabase

@@ -80,6 +80,12 @@ export function ProjectCard({
             </span>
           </div>
           <ProgressBar value={progress} tone="accent" label="Timeline progress" />
+          {!isClosed && project.developmentProgress !== null && (
+            <div className="flex items-center justify-between pt-0.5 text-[11px] text-text-secondary">
+              <span>Development progress</span>
+              <span className="tabular-nums">{project.developmentProgress}%</span>
+            </div>
+          )}
         </div>
 
         <div className="mt-5 flex items-end justify-between gap-3">

@@ -111,21 +111,11 @@ export function daysBetween(start: string, end: string): number {
   return Math.max(0, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 }
 
-/** % of pending tasks marked done, or null when there are none yet (a
- * distinct state from 0%, per the PRD: 0% implies tasks exist and none are
- * done, which isn't the same statement as "none tracked"). Milestones are
- * deliberately excluded — they're a coarser, phase-level label ("Phase 2 —
- * Done") that a human sets directly, while this metric is meant to read as
- * "how much of the tracked task backlog is left," which only the pending_tasks
- * rows carry. There's no separate cache to invalidate since the caller always
- * passes live rows. */
-export function computeMilestoneProgress(
-  pendingTasks: { status: string }[]
-): number | null {
-  if (pendingTasks.length === 0) return null;
-  const doneTasks = pendingTasks.filter((t) => t.status.toLowerCase() === "done").length;
-  return Math.round((doneTasks / pendingTasks.length) * 100);
-}
+// "Milestone progress" (done_tasks / total_tasks) was removed — it read ~0% for
+// any active project because the extraction pipeline almost never flips a task
+// to "done". It is replaced by the Development Progress Index in lib/progress/,
+// which blends lifecycle stage, milestone checkpoints, and task resolution
+// (with stale tasks counted as presumed-complete) and is tracked over time.
 
 /** Bandwidth read against the allocation model: 1 lead project + 2 member
  * projects is "balanced". Exceeding either is "overloaded" (tight bandwidth);
