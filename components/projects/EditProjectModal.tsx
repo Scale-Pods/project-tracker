@@ -228,6 +228,74 @@ function EditProjectModalContent({
           </div>
 
           <div>
+            <p className="mb-2 text-sm text-text-primary">Development timeline</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClasses} htmlFor="devStartDate">
+                  Start
+                </label>
+                <input
+                  id="devStartDate"
+                  name="devStartDate"
+                  type="date"
+                  required
+                  defaultValue={state.submitted?.devStartDate ?? project.dev_start_date}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.devStartDate} />
+              </div>
+              <div>
+                <label className={labelClasses} htmlFor="devEndDate">
+                  End
+                </label>
+                <input
+                  id="devEndDate"
+                  name="devEndDate"
+                  type="date"
+                  required
+                  defaultValue={state.submitted?.devEndDate ?? project.dev_end_date}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.devEndDate} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm text-text-primary">Testing/Support timeline</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClasses} htmlFor="supportStartDate">
+                  Start
+                </label>
+                <input
+                  id="supportStartDate"
+                  name="supportStartDate"
+                  type="date"
+                  required
+                  defaultValue={state.submitted?.supportStartDate ?? project.support_start_date}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.supportStartDate} />
+              </div>
+              <div>
+                <label className={labelClasses} htmlFor="supportEndDate">
+                  End
+                </label>
+                <input
+                  id="supportEndDate"
+                  name="supportEndDate"
+                  type="date"
+                  required
+                  defaultValue={state.submitted?.supportEndDate ?? project.support_end_date}
+                  className={inputClasses}
+                />
+                <FieldError message={errors.supportEndDate} />
+              </div>
+            </div>
+          </div>
+
+          <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-text-primary">Assignees</span>
               <FieldError message={errors.assignees} />

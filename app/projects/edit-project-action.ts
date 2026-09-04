@@ -24,6 +24,10 @@ export async function editProject(
     scope: String(formData.get("scope") ?? "").trim(),
     priority: String(formData.get("priority") ?? ""),
     projectValue: String(formData.get("projectValue") ?? ""),
+    devStartDate: String(formData.get("devStartDate") ?? ""),
+    devEndDate: String(formData.get("devEndDate") ?? ""),
+    supportStartDate: String(formData.get("supportStartDate") ?? ""),
+    supportEndDate: String(formData.get("supportEndDate") ?? ""),
     assignees: assigneeNames.map((name, i) => ({
       id: assigneeIds[i] || undefined,
       name: name.trim(),
@@ -51,6 +55,10 @@ export async function editProject(
       scope: input.scope,
       priority: input.priority,
       project_value: dealSize,
+      dev_start_date: input.devStartDate,
+      dev_end_date: input.devEndDate,
+      support_start_date: input.supportStartDate,
+      support_end_date: input.supportEndDate,
     })
     .eq("id", input.projectId)
     .select()

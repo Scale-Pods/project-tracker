@@ -23,6 +23,44 @@ export type AddProjectInput = {
 export const PRIORITY_OPTIONS = ["High", "Medium", "Low"] as const;
 export const PAYOUT_ROLE_OPTIONS = ["Owner", "Support"] as const;
 
+type TimelineFields = {
+  devStartDate: string;
+  devEndDate: string;
+  supportStartDate: string;
+  supportEndDate: string;
+};
+
+/** Presence + ordering rules for the two project timelines. Shared by add and
+ * edit so the two never drift. Mutates `errors` in place. */
+function validateTimelineFields(input: TimelineFields, errors: Record<string, string>): void {
+  if (!input.devStartDate) errors.devStartDate = "Development start date is required.";
+  if (!input.devEndDate) errors.devEndDate = "Development end date is required.";
+  if (
+    input.devStartDate &&
+    input.devEndDate &&
+    new Date(input.devEndDate) <= new Date(input.devStartDate)
+  ) {
+    errors.devEndDate = "Development end date must be after the development start date.";
+  }
+
+  if (!input.supportStartDate) errors.supportStartDate = "Testing/Support start date is required.";
+  if (!input.supportEndDate) errors.supportEndDate = "Testing/Support end date is required.";
+  if (
+    input.devEndDate &&
+    input.supportStartDate &&
+    new Date(input.supportStartDate) < new Date(input.devEndDate)
+  ) {
+    errors.supportStartDate = "Testing/Support can't start before development ends.";
+  }
+  if (
+    input.supportStartDate &&
+    input.supportEndDate &&
+    new Date(input.supportEndDate) <= new Date(input.supportStartDate)
+  ) {
+    errors.supportEndDate = "Testing/Support end date must be after its start date.";
+  }
+}
+
 // Display labels only — project_assignees.payout_role keeps storing
 // "Owner"/"Support" so the payout-split automation's string match doesn't break.
 export const PAYOUT_ROLE_LABEL: Record<string, string> = {
@@ -56,32 +94,7 @@ export function validateAddProjectInput(input: AddProjectInput): {
   if (!PRIORITY_OPTIONS.includes(input.priority as (typeof PRIORITY_OPTIONS)[number])) {
     errors.priority = "Select a priority.";
   }
-  if (!input.devStartDate) errors.devStartDate = "Development start date is required.";
-  if (!input.devEndDate) errors.devEndDate = "Development end date is required.";
-  if (
-    input.devStartDate &&
-    input.devEndDate &&
-    new Date(input.devEndDate) <= new Date(input.devStartDate)
-  ) {
-    errors.devEndDate = "Development end date must be after the development start date.";
-  }
-
-  if (!input.supportStartDate) errors.supportStartDate = "Testing/Support start date is required.";
-  if (!input.supportEndDate) errors.supportEndDate = "Testing/Support end date is required.";
-  if (
-    input.devEndDate &&
-    input.supportStartDate &&
-    new Date(input.supportStartDate) < new Date(input.devEndDate)
-  ) {
-    errors.supportStartDate = "Testing/Support can't start before development ends.";
-  }
-  if (
-    input.supportStartDate &&
-    input.supportEndDate &&
-    new Date(input.supportEndDate) <= new Date(input.supportStartDate)
-  ) {
-    errors.supportEndDate = "Testing/Support end date must be after its start date.";
-  }
+  validateTimelineFields(input, errors);
 
   const dealSize = Number(input.projectValue.replace(/,/g, ""));
   if (!input.projectValue || Number.isNaN(dealSize) || dealSize <= 0) {
@@ -110,6 +123,10 @@ export type EditProjectInput = {
   scope: string;
   priority: string;
   projectValue: string;
+  devStartDate: string;
+  devEndDate: string;
+  supportStartDate: string;
+  supportEndDate: string;
   assignees: EditAssigneeInput[];
 };
 
@@ -135,6 +152,8 @@ export function validateEditProjectInput(input: EditProjectInput): {
   if (!PRIORITY_OPTIONS.includes(input.priority as (typeof PRIORITY_OPTIONS)[number])) {
     errors.priority = "Select a priority.";
   }
+
+  validateTimelineFields(input, errors);
 
   const dealSize = Number(input.projectValue.replace(/,/g, ""));
   if (!input.projectValue || Number.isNaN(dealSize) || dealSize <= 0) {
