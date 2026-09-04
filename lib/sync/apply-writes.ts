@@ -1,5 +1,6 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
+import { milestoneKey } from "@/lib/format";
 import type { FirefliesMeetingDetails } from "@/lib/fireflies/client";
 import type { SyncContext } from "@/lib/sync/fetch-sync-context";
 import type { ExtractionResult, ExtractionSegment } from "@/lib/sync/sync-extraction";
@@ -183,6 +184,20 @@ function buildSegmentWrites(
     });
   }
 
+  // Existing milestones for this project, indexed by their identity key, so a
+  // recurring checkpoint updates its row instead of spawning a near-duplicate.
+  // Existing milestones for this project, indexed by their identity key, so a
+  // recurring checkpoint updates its row instead of spawning a near-duplicate.
+  const existingMilestones = context.milestones.filter((m) => m.project_id === segment.projectId);
+  const milestoneIdByKey = new Map(
+    existingMilestones.map((m) => [milestoneKey(m.name), m.id] as const)
+  );
+  const validMilestoneIds = new Set(existingMilestones.map((m) => m.id));
+  // Collapse multiple mentions of one checkpoint in the same segment to a single
+  // write (last mention wins), keyed by the existing row it resolves to or, for
+  // a genuinely new one, its milestone key.
+  const milestoneWrites = new Map<string, Record<string, unknown>>();
+
   for (const m of segment.milestones) {
     if (m.confidence < 0 || m.confidence > 1) continue;
 
@@ -200,8 +215,24 @@ function buildSegmentWrites(
       continue;
     }
 
-    writes.milestones.push({ name: m.name, status: m.status });
+    // Trust a valid matched id from Claude; otherwise fall back to the
+    // milestone-key match. This is the code backstop that catches the model
+    // proposing an "insert" for a checkpoint we already track (same defensive
+    // posture as mergeSegmentsByProject / MIN_PROJECT_MATCH_CONFIDENCE).
+    const key = milestoneKey(m.name);
+    const matchedId =
+      m.action === "update" && m.matchedMilestoneId && validMilestoneIds.has(m.matchedMilestoneId)
+        ? m.matchedMilestoneId
+        : (milestoneIdByKey.get(key) ?? null);
+
+    milestoneWrites.set(matchedId ?? `new:${key}`, {
+      action: matchedId ? "update" : "insert",
+      matchedMilestoneId: matchedId,
+      name: m.name,
+      status: m.status,
+    });
   }
+  writes.milestones.push(...milestoneWrites.values());
 
   for (const r of segment.remarks) {
     if (r.confidence < 0 || r.confidence > 1) continue;

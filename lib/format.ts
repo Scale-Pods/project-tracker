@@ -117,6 +117,18 @@ export function daysBetween(start: string, end: string): number {
 // which blends lifecycle stage, milestone checkpoints, and task resolution
 // (with stale tasks counted as presumed-complete) and is tracked over time.
 
+/** A stable identity key for a milestone so its prose variants collapse to one:
+ * "Phase 3", "Phase 3 complete and tested" and "Phase 3 — safe outbound
+ * execution" all -> "phase 3"; "Milestone 1 — Attraction Engine" -> "milestone 1".
+ * Falls back to the fully-normalised name when there's no Phase/Milestone tag.
+ * Used by the sync write layer to dedupe against existing milestones and by
+ * lib/progress/reconstruct.ts to fold audit history onto the live rows. */
+export function milestoneKey(name: string): string {
+  const tag = name.toLowerCase().match(/\b(phase|milestone|sprint|stage)s?\s*#?\s*(\d+)\b/);
+  if (tag) return `${tag[1]} ${tag[2]}`;
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Bandwidth read against the allocation model: 1 lead project + 2 member
  * projects is "balanced". Exceeding either is "overloaded" (tight bandwidth);
  * falling short of either without exceeding the other is "light" (spare capacity). */

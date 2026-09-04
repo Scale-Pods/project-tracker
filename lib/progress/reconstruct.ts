@@ -1,6 +1,6 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
-import { toDateKey } from "@/lib/format";
+import { milestoneKey, toDateKey } from "@/lib/format";
 import type { DevelopmentProgressInput } from "@/lib/progress/compute";
 
 // Assembles the "as of date D" inputs the DPI model needs for a single project,
@@ -16,7 +16,7 @@ import type { DevelopmentProgressInput } from "@/lib/progress/compute";
 // tasks and blockers already carry their own dated columns, so the pure model
 // filters them by date itself; they're passed through unchanged.
 
-type MilestoneEvent = { date: string; status: string };
+type MilestoneEvent = { date: string; status: string; live?: boolean };
 
 export type ProjectProgressContext = {
   project: {
@@ -43,15 +43,6 @@ export type ProjectProgressContext = {
    * milestone the project doesn't actually have. */
   milestoneTimeline: Map<string, MilestoneEvent[]>;
 };
-
-/** A stable key for matching a milestone's prose variants to each other:
- * "Phase 2 — AI personalisation…" and "Phase 2: in_progress" -> "phase 2".
- * Falls back to the fully normalised name when there's no Phase/Milestone tag. */
-export function milestoneKey(name: string): string {
-  const tag = name.toLowerCase().match(/\b(phase|milestone|sprint|stage)\s*#?\s*(\d+)\b/);
-  if (tag) return `${tag[1]} ${tag[2]}`;
-  return name.trim().toLowerCase().replace(/\s+/g, " ");
-}
 
 const MS_STATUS_RE = /(not_started|in_progress|done)/g;
 
@@ -193,20 +184,26 @@ export async function loadProjectProgressContext(
     events.push({ date: effectiveDate(r), status: parsed.status });
   }
 
-  // Seed a milestone that has no parseable audit history from its live row, so
-  // it still counts (dated to when its status last moved).
+  // Anchor every series to its live row's current status, dated to when that
+  // status last moved (updated_at). The live row is the authoritative present
+  // state — a later audit narration can be a stale/misparsed phrasing, and a
+  // manual DB correction leaves no audit trail at all — so it must win for
+  // "as of now" while the audit events still drive earlier points.
   for (const [key, live] of liveByKey) {
     const events = milestoneTimeline.get(key)!;
-    if (events.length === 0) {
-      const seed = toDateKey(new Date(live.updated_at));
-      events.push({ date: seed < devStart ? devStart : seed, status: live.status });
-    }
+    const seed = toDateKey(new Date(live.updated_at));
+    events.push({ date: seed < devStart ? devStart : seed, status: live.status, live: true });
   }
 
+  // Ascending by date; on a tied date the live-row seed sorts last (it's the
+  // authoritative present state), then a "done" audit event beats an earlier
+  // in-progress one. milestonesAsOf takes the last event on/before the date.
   for (const events of milestoneTimeline.values()) {
     events.sort(
       (a, b) =>
-        a.date.localeCompare(b.date) || Number(b.status === "done") - Number(a.status === "done")
+        a.date.localeCompare(b.date) ||
+        Number(a.live ?? false) - Number(b.live ?? false) ||
+        Number(a.status === "done") - Number(b.status === "done")
     );
   }
 

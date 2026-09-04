@@ -38,12 +38,20 @@ export type SyncContext = {
     first_mentioned_date: string;
     due_date: string | null;
   }[];
+  // Every tracked milestone, so Claude can match a checkpoint it hears against an
+  // existing one and update it rather than creating a near-duplicate row.
+  milestones: {
+    id: string;
+    project_id: string;
+    name: string;
+    status: string;
+  }[];
 };
 
 export async function fetchSyncContext(): Promise<SyncContext> {
   const supabase = createServiceRoleClient();
 
-  const [projectsRes, stagesRes, rosterRes, blockersRes, tasksRes] = await Promise.all([
+  const [projectsRes, stagesRes, rosterRes, blockersRes, tasksRes, milestonesRes] = await Promise.all([
     supabase
       .from("projects")
       .select("id, client_name, project_name, scope, stage, status")
@@ -61,9 +69,10 @@ export async function fetchSyncContext(): Promise<SyncContext> {
       .from("pending_tasks")
       .select("id, project_id, assignee_name, description, first_mentioned_date, due_date")
       .eq("status", "open"),
+    supabase.from("milestones").select("id, project_id, name, status"),
   ]);
 
-  for (const res of [projectsRes, stagesRes, rosterRes, blockersRes, tasksRes]) {
+  for (const res of [projectsRes, stagesRes, rosterRes, blockersRes, tasksRes, milestonesRes]) {
     if (res.error) throw new Error(res.error.message);
   }
 
@@ -73,5 +82,6 @@ export async function fetchSyncContext(): Promise<SyncContext> {
     roster: rosterRes.data ?? [],
     openBlockers: blockersRes.data ?? [],
     openTasks: tasksRes.data ?? [],
+    milestones: milestonesRes.data ?? [],
   };
 }

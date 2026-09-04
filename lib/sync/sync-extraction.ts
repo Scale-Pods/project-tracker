@@ -40,6 +40,11 @@ const TaskWriteSchema = z.object({
 export type TaskWrite = z.infer<typeof TaskWriteSchema>;
 
 const MilestoneWriteSchema = z.object({
+  action: z.enum(["insert", "update"]),
+  // Set when action="update": the id of the existing milestone this checkpoint
+  // refers to. The write layer also re-checks the match in code (by milestone
+  // key) and will redirect a mislabelled "insert" onto an existing row.
+  matchedMilestoneId: z.string().nullable(),
   name: z.string(),
   status: z.enum(["not_started", "in_progress", "done"]),
   confidence: z.number(),
@@ -130,6 +135,12 @@ You are given each project's currently open blockers and tasks. Before proposing
 - If the transcript says it's resolved/done, also set resolvedDate/completedDate to the date it was actually resolved (may be earlier than the meeting date if stated), and status accordingly. A status change without its paired date will be rejected downstream, so always set both together.
 If no match, action="insert", matchedBlockerId/matchedTaskId=null, firstSeenDate/firstMentionedDate = the date this was first raised (usually the meeting date, but use an earlier stated date if the speaker references when it originated).
 
+## Deduplication of milestones
+You are also given each project's currently tracked milestones (id, name, status). A milestone is a delivery checkpoint. The SAME checkpoint recurs across meetings under different wording — "Phase 3", "Phase 3 complete and tested" and "Phase 3 — safe outbound execution" are one milestone; "Milestone 1", "the Attraction Engine milestone" and "combined phases one to three" are one milestone. Before emitting a milestone, check the given list by meaning:
+- If it refers to an existing milestone: action="update", matchedMilestoneId = that id, name = the existing milestone's name **copied verbatim** (never rephrase or "improve" it), status = its current state from this meeting.
+- Only if it is a genuinely new checkpoint never tracked before: action="insert", matchedMilestoneId=null, name = a short, stable label ("Milestone 2", "Phase 4"), not a sentence with dates in it.
+Prefer update. When unsure whether a mention is a new milestone or progress within an existing one, treat it as an update to the existing one (or, if it's just phase-level progress toward a tracked milestone, a remark) — do not create a second milestone for the same deliverable.
+
 ## Task due dates — estimates and revisions
 Each open task you're given may already carry a due_date from an earlier meeting (its previous estimate). Whenever a task statement includes a duration or a target ("2 days", "should be done by Friday", "3 more days"), compute dueDate as an absolute date: the stated duration added to *this meeting's date*, or the explicit date if one was given. Set dueDate every time an estimate is stated, whether or not it changed — you are reporting what was said this meeting, not deciding whether it's a revision. Do not do the delay/slippage arithmetic yourself and do not mention it in a remark; the system compares your dueDate against the task's previous due_date on its own and generates the delay narrative deterministically. If no duration or target is mentioned for a task this meeting, leave dueDate null — do not carry the old value forward yourself.
 
@@ -204,6 +215,9 @@ ${JSON.stringify(context.openBlockers, null, 2)}
 
 ## Currently open tasks (for dedup matching)
 ${JSON.stringify(context.openTasks, null, 2)}
+
+## Currently tracked milestones (for dedup matching)
+${JSON.stringify(context.milestones, null, 2)}
 
 ## Resolved speakers
 ${buildResolvedSpeakerBlock(speakerNames, context.roster)}
