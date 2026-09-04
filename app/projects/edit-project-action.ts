@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/server-client";
+import { recomputeDelayForProjects } from "@/lib/sync/recompute-delay";
 import {
   validateEditProjectInput,
   type EditProjectInput,
@@ -125,8 +126,30 @@ export async function editProject(
     }
   }
 
+  // The timeline may have moved — health status and delay are derived from the
+  // dev/support windows (lib/sync/recompute-delay.ts), so recompute them now
+  // rather than leaving a stale "Delayed" badge until the next daily cron.
+  // Idempotent and self-auditing (writes audit_log source 'delay_computation'
+  // only when a value actually changes); it also skips closed projects. A
+  // failure here must not fail an edit whose row already persisted.
+  let updatedProject = project;
+  try {
+    await recomputeDelayForProjects([input.projectId]);
+    const { data: refreshed } = await supabase
+      .from("projects")
+      .select()
+      .eq("id", input.projectId)
+      .single();
+    if (refreshed) updatedProject = refreshed;
+  } catch (err) {
+    console.error(
+      `editProject: delay/status recompute failed for ${input.projectId}:`,
+      err instanceof Error ? err.message : err
+    );
+  }
+
   revalidatePath("/projects");
   revalidatePath(`/projects/${input.projectId}`);
 
-  return { status: "success", project };
+  return { status: "success", project: updatedProject };
 }
